@@ -439,6 +439,12 @@ class TimetableApp {
     }
 
     getSubjectForTimeSlot(dayOfWeek, timeSlot, date) {
+        // Check if this day has a holiday with hideSchedule enabled
+        const holiday = this.getHolidayForDate(date, this.holidaysData);
+        if (holiday && holiday.hideSchedule) {
+            return null; // Don't show subjects on hidden schedule days
+        }
+        
         // Get the day name from the day of week
         const dayName = this.dayNames[dayOfWeek];
         const dayEntries = this.timetableData[dayName] || [];
@@ -480,10 +486,21 @@ class TimetableApp {
     }
 
     createSubjectBlock(entry) {
+        const categoryColors = {
+            lecture: 'bg-blue-100 border-l-4 border-blue-500 text-blue-900',
+            tutorial: 'bg-green-100 border-l-4 border-green-500 text-green-900', 
+            activity: 'bg-orange-100 border-l-4 border-orange-500 text-orange-900',
+            exam: 'bg-red-100 border-l-4 border-red-500 text-red-900',
+            other: 'bg-gray-100 border-l-4 border-gray-500 text-gray-900'
+        };
+        
+        const colorClass = categoryColors[entry.category] || categoryColors.lecture;
+        
         return `
-            <div class="subject-block group relative cursor-pointer" onclick="window.app.showTimetableEntryDetails('${entry.id}')">
-                <div class="subject-name text-xs font-medium">${entry.subjectName}</div>
-                <div class="subject-location text-xs text-gray-600">${entry.location}</div>
+            <div class="subject-block group relative cursor-pointer p-2 rounded ${colorClass} hover:opacity-80 transition-opacity" onclick="window.app.showTimetableEntryDetails('${entry.id}')">
+                <div class="subject-name text-xs font-medium truncate">${entry.subjectName}</div>
+                <div class="subject-code text-xs opacity-75 truncate">${entry.subjectCode || ''}</div>
+                <div class="subject-location text-xs opacity-75 truncate">${entry.location}</div>
                 <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button class="edit-subject-btn p-1 bg-white rounded shadow-sm text-gray-400 hover:text-blue-500 transition-colors" 
                             onclick="event.stopPropagation(); window.app.editTimetableEntry('${entry.id}')" title="แก้ไข">
@@ -820,7 +837,8 @@ class TimetableApp {
             endTime: formData.get('endTime'),
             location: formData.get('location'),
             onlineLink: formData.get('onlineLink') || '',
-            notes: formData.get('notes') || ''
+            notes: formData.get('notes') || '',
+            category: formData.get('category') || 'lecture'
         };
         
         try {
@@ -936,6 +954,7 @@ class TimetableApp {
             name: formData.get('holidayName'),
             date: formData.get('holidayDate'),
             hasMakeup: formData.get('hasMakeup') === 'on',
+            hideSchedule: formData.get('hideSchedule') === 'on',
             makeupDate: formData.get('makeupDate') || null,
             makeupStartTime: formData.get('makeupStartTime') || null,
             makeupEndTime: formData.get('makeupEndTime') || null,
@@ -1407,6 +1426,72 @@ class TimetableApp {
             console.error('Error deleting timetable entry:', error);
             this.showError('เกิดข้อผิดพลาดในการลบรายวิชา');
         }
+    }
+
+    // Export/Import functionality
+    exportData() {
+        try {
+            const data = {
+                terms: this.database.getItem('terms') || {},
+                timetables: this.database.getItem('timetables') || {},
+                todos: this.database.getItem('todos') || {},
+                holidays: this.database.getItem('holidays') || {},
+                exportDate: new Date().toISOString(),
+                version: '1.0'
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `timetable-backup-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            this.showSuccess('ส่งออกข้อมูลสำเร็จ');
+        } catch (error) {
+            console.error('Export error:', error);
+            this.showError('เกิดข้อผิดพลาดในการส่งออกข้อมูล');
+        }
+    }
+
+    importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                // Validate data structure
+                if (!data.terms || !data.version) {
+                    this.showError('ไฟล์ข้อมูลไม่ถูกต้อง');
+                    return;
+                }
+                
+                if (confirm('การนำเข้าข้อมูลจะเขียนทับข้อมูลปัจจุบัน คุณแน่ใจหรือไม่?')) {
+                    // Import data to localStorage
+                    if (data.terms) this.database.setItem('terms', data.terms);
+                    if (data.timetables) this.database.setItem('timetables', data.timetables);
+                    if (data.todos) this.database.setItem('todos', data.todos);
+                    if (data.holidays) this.database.setItem('holidays', data.holidays);
+                    
+                    // Reload the app
+                    this.showSuccess('นำเข้าข้อมูลสำเร็จ กำลังโหลดข้อมูลใหม่...');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                this.showError('ไฟล์ข้อมูลไม่ถูกต้องหรือเสียหาย');
+            }
+        };
+        reader.readAsText(file);
+        
+        // Reset file input
+        event.target.value = '';
     }
 }
 

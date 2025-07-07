@@ -97,18 +97,9 @@
                         </div>
                         
                         <!-- Action Buttons -->
-                        <div class="flex space-x-2">
-                            <button id="addSubjectBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                                <i class="fas fa-book mr-1 lg:mr-2"></i><span class="hidden sm:inline">เพิ่มรายวิชา</span>
-                            </button>
-                            <button onclick="window.app.exportData()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                                <i class="fas fa-download mr-1 lg:mr-2"></i><span class="hidden sm:inline">ส่งออก</span>
-                            </button>
-                            <button onclick="document.getElementById('importFile').click()" class="bg-purple-500 hover:bg-purple-600 text-white px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                                <i class="fas fa-upload mr-1 lg:mr-2"></i><span class="hidden sm:inline">นำเข้า</span>
-                            </button>
-                            <input type="file" id="importFile" accept=".json" style="display: none;" onchange="window.app.importData(event)">
-                        </div>
+                        <button id="addSubjectBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-book mr-1 lg:mr-2"></i><span class="hidden sm:inline">เพิ่มรายวิชา</span>
+                        </button>
                         
                         <!-- Theme Selector (Desktop) -->
                         <div class="hidden lg:block">
@@ -352,16 +343,6 @@
                     <input type="text" name="location" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น ห้อง 301">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">ประเภทกิจกรรม</label>
-                    <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                        <option value="lecture">วิชาเรียน</option>
-                        <option value="tutorial">ติว</option>
-                        <option value="activity">กิจกรรม</option>
-                        <option value="exam">สอบ</option>
-                        <option value="other">อื่นๆ</option>
-                    </select>
-                </div>
-                <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">ลิงก์ออนไลน์ (ถ้ามี)</label>
                     <input type="url" name="onlineLink" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="https://meet.google.com/...">
                 </div>
@@ -437,12 +418,6 @@
                     <label class="flex items-center">
                         <input type="checkbox" name="hasMakeup" class="mr-2">
                         <span class="text-sm text-gray-700">มีการชดเชย</span>
-                    </label>
-                </div>
-                <div>
-                    <label class="flex items-center">
-                        <input type="checkbox" name="hideSchedule" class="mr-2">
-                        <span class="text-sm text-gray-700">ซ่อนตารางเรียนของวันนี้ (ไม่ลบข้อมูลจริง)</span>
                     </label>
                 </div>
                 <div id="makeupFields" class="space-y-4 hidden">

@@ -43,13 +43,20 @@ async function initializeApp() {
             return;
         }
         
-        // Test Firebase connection before proceeding
+        // Test Firebase connection with timeout
         try {
-            await window.firebaseDB.ref('.info/connected').once('value');
+            const connectionPromise = window.firebaseDB.ref('test').once('value');
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Firebase connection timeout')), 5000)
+            );
+            
+            await Promise.race([connectionPromise, timeoutPromise]);
             console.log('Firebase connection test passed');
         } catch (error) {
             console.error('Firebase connection failed:', error);
-            showFirebaseError();
+            // Continue with offline mode instead of showing error
+            console.log('Continuing in offline mode...');
+            initOfflineMode();
             return;
         }
         
@@ -72,6 +79,118 @@ async function initializeApp() {
     } finally {
         hideLoading();
     }
+}
+
+function initOfflineMode() {
+    console.log('Initializing offline mode...');
+    
+    // Show offline mode notification
+    const offlineDiv = document.createElement('div');
+    offlineDiv.id = 'offlineNotice';
+    offlineDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #ffa500;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 10px;
+        z-index: 10000;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    `;
+    offlineDiv.innerHTML = `
+        <strong>โหมดออฟไลน์</strong> - กำลังใช้งานแบบทดสอบ
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; margin-left: 10px; cursor: pointer; font-size: 16px;">×</button>
+    `;
+    document.body.appendChild(offlineDiv);
+    
+    // Initialize with sample data
+    initSampleData();
+    setCurrentDate();
+    setCurrentWeek();
+    generateTimetable();
+    updateTodoList();
+    updateHolidayList();
+    
+    console.log('Offline mode initialized successfully');
+}
+
+function initSampleData() {
+    // Sample term data
+    const sampleTermId = 'term_2568_1';
+    currentTerm = sampleTermId;
+    
+    // Set term selector
+    const termSelect = document.getElementById('termSelect');
+    termSelect.innerHTML = `
+        <option value="">เลือกเทอม</option>
+        <option value="${sampleTermId}" selected>เทอม 1/2568 (ตัวอย่าง)</option>
+    `;
+    
+    // Sample subjects data (based on your university schedule)
+    subjectsData = {
+        'math_calculus': {
+            name: 'แคลคูลัส 2',
+            code: 'MATH201',
+            instructor: 'อ.สมชาย',
+            dayOfWeek: 3, // Wednesday
+            startTime: '13:00',
+            endTime: '15:00',
+            location: 'ห้อง 301',
+            onlineLink: '',
+            notes: 'ต้องเตรียมเครื่องคิดเลข'
+        },
+        'physics_lab': {
+            name: 'ปฏิบัติการฟิสิกส์',
+            code: 'PHYS105',
+            instructor: 'อ.สมหญิง',
+            dayOfWeek: 5, // Friday
+            startTime: '09:00',
+            endTime: '12:00',
+            location: 'ห้องปฏิบัติการ A',
+            onlineLink: '',
+            notes: 'ใส่เสื้อกาวน์ขาว'
+        },
+        'computer_sci': {
+            name: 'วิทยาศาสตร์คอมพิวเตอร์',
+            code: 'CS101',
+            instructor: 'อ.เทคโน',
+            dayOfWeek: 2, // Tuesday
+            startTime: '10:00',
+            endTime: '12:00',
+            location: 'ห้องคอมพิวเตอร์ 1',
+            onlineLink: 'https://meet.google.com/abc-defg-hij',
+            notes: 'เตรียมแล็ปท็อป'
+        }
+    };
+    
+    // Sample todos
+    const today = new Date().toISOString().split('T')[0];
+    todosData = {
+        'todo1': {
+            text: 'ทำการบ้านแคลคูลัส บทที่ 5',
+            date: today,
+            priority: 'high',
+            completed: false
+        },
+        'todo2': {
+            text: 'อ่านหนังสือฟิสิกส์ บทที่ 3',
+            date: today,
+            priority: 'medium',
+            completed: false
+        }
+    };
+    
+    // Sample holidays
+    holidaysData = {
+        'holiday1': {
+            name: 'วันหยุดกลางภาค',
+            date: '2024-10-15',
+            moveToSunday: true
+        }
+    };
 }
 
 function showFirebaseError() {
@@ -103,6 +222,9 @@ function showFirebaseError() {
         </ol>
         <button onclick="location.reload()" style="background: white; color: #ff4444; border: none; padding: 10px 20px; border-radius: 5px; margin-top: 10px; cursor: pointer;">
             โหลดใหม่
+        </button>
+        <button onclick="this.parentElement.remove(); initOfflineMode();" style="background: #ff6666; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 10px 5px; cursor: pointer;">
+            ใช้งานแบบออฟไลน์
         </button>
     `;
     document.body.appendChild(errorDiv);
@@ -551,6 +673,11 @@ function closeModal(modalId) {
     forms.forEach(form => form.reset());
 }
 
+// Utility function to check if Firebase is available
+function isFirebaseAvailable() {
+    return window.firebaseDB && typeof window.firebaseDB.ref === 'function';
+}
+
 // Form handlers
 async function handleAddTerm(e) {
     e.preventDefault();
@@ -564,15 +691,28 @@ async function handleAddTerm(e) {
     };
     
     try {
-        const termRef = await firebaseDB.ref('terms').push(termData);
-        closeModal('addTermModal');
-        await loadTerms();
-        
-        // Select the new term
-        document.getElementById('termSelect').value = termRef.key;
-        currentTerm = termRef.key;
-        await loadAllData();
-        generateTimetable();
+        if (isFirebaseAvailable()) {
+            const termRef = await firebaseDB.ref('terms').push(termData);
+            closeModal('addTermModal');
+            await loadTerms();
+            
+            // Select the new term
+            document.getElementById('termSelect').value = termRef.key;
+            currentTerm = termRef.key;
+            await loadAllData();
+            generateTimetable();
+        } else {
+            // Offline mode
+            const termId = 'term_' + Date.now();
+            const termSelect = document.getElementById('termSelect');
+            const option = document.createElement('option');
+            option.value = termId;
+            option.textContent = termData.name;
+            termSelect.appendChild(option);
+            termSelect.value = termId;
+            currentTerm = termId;
+            closeModal('addTermModal');
+        }
         
         alert('เพิ่มเทอมเรียบร้อยแล้ว');
     } catch (error) {
@@ -604,11 +744,17 @@ async function handleAddSubject(e) {
     };
     
     try {
-        await firebaseDB.ref(`subjects/${currentTerm}`).push(subjectData);
-        closeModal('addSubjectModal');
-        await loadAllData();
-        generateTimetable();
+        if (isFirebaseAvailable()) {
+            await firebaseDB.ref(`subjects/${currentTerm}`).push(subjectData);
+            await loadAllData();
+        } else {
+            // Offline mode - add to local data
+            const subjectId = 'subject_' + Date.now();
+            subjectsData[subjectId] = subjectData;
+        }
         
+        closeModal('addSubjectModal');
+        generateTimetable();
         alert('เพิ่มรายวิชาเรียบร้อยแล้ว');
     } catch (error) {
         console.error('Error adding subject:', error);

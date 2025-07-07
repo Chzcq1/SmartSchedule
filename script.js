@@ -4,6 +4,7 @@ class TimetableApp {
         // Core data
         this.currentTerm = null;
         this.subjectsData = {};
+        this.timetableData = {};
         this.todosData = {};
         this.holidaysData = {};
         this.makeupClassesData = {};
@@ -13,14 +14,14 @@ class TimetableApp {
         this.database = null;
         this.isFirebaseConnected = false;
         
-        // Time slots (8:00 AM to 7:30 PM)
+        // Time slots (8:00 AM to 7:00 PM) - Full hours only
         this.timeSlots = [
-            '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-            '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
-            '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
+            '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', 
+            '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'
         ];
         
         this.daysOfWeek = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+        this.dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     }
 
     async initialize() {
@@ -276,25 +277,34 @@ class TimetableApp {
         try {
             if (this.isFirebaseConnected) {
                 // Load from Firebase
-                const [subjectsSnap, todosSnap, holidaysSnap] = await Promise.all([
+                const [subjectsSnap, timetableSnap, todosSnap, holidaysSnap] = await Promise.all([
                     this.database.ref(`subjects/${this.currentTerm}`).once('value'),
+                    this.database.ref(`timetables/${this.currentTerm}`).once('value'),
                     this.database.ref(`todos/${this.currentTerm}`).once('value'),
                     this.database.ref(`holidays/${this.currentTerm}`).once('value')
                 ]);
                 
                 this.subjectsData = subjectsSnap.val() || {};
+                this.timetableData = timetableSnap.val() || {};
                 this.todosData = todosSnap.val() || {};
                 this.holidaysData = holidaysSnap.val() || {};
             } else {
                 // Load from local storage
                 this.subjectsData = await this.database.getSubjects(this.currentTerm);
+                this.timetableData = await this.database.getTimetable(this.currentTerm);
                 this.todosData = await this.database.getTodos(this.currentTerm);
                 this.holidaysData = await this.database.getHolidays(this.currentTerm);
             }
             
+            // Update displays
+            this.generateTimetable();
+            this.updateTodoList();
+            this.updateHolidayList();
+            
             console.log('All data loaded successfully');
         } catch (error) {
             console.error('Error loading data:', error);
+            this.showError('เกิดข้อผิดพลาดในการโหลดข้อมูล');
         }
     }
 
@@ -413,7 +423,7 @@ class TimetableApp {
                     cell.innerHTML = `<div class="holiday-indicator">${holiday.name}</div>`;
                     cell.classList.add('holiday');
                 } else {
-                    cell.addEventListener('click', () => this.onCellClick(cell, currentDate));
+                    cell.addEventListener('click', () => this.onCellClick(cell, currentDate, dayIndex, timeSlot));
                 }
                 
                 // Highlight today
@@ -429,17 +439,24 @@ class TimetableApp {
     }
 
     getSubjectForTimeSlot(dayOfWeek, timeSlot, date) {
-        return Object.values(this.subjectsData).find(subject => {
-            if (subject.dayOfWeek !== dayOfWeek) return false;
+        // Get the day name from the day of week
+        const dayName = this.dayNames[dayOfWeek];
+        const dayEntries = this.timetableData[dayName] || [];
+        
+        // Find entry that matches the time slot
+        return dayEntries.find(entry => {
+            // Check if time slot falls within this entry's time range
+            const entryStart = this.timeToMinutes(entry.startTime);
+            const entryEnd = this.timeToMinutes(entry.endTime);
+            const slotTime = this.timeToMinutes(timeSlot);
             
-            // Check if the date is within the subject period
-            if (!this.calendar.isDateInSubjectPeriod(date, subject.startDate, subject.endDate)) {
-                return false;
-            }
-            
-            // Check if time slot is within subject time range
-            return this.calendar.isTimeSlotInSubject(timeSlot, subject);
+            return slotTime >= entryStart && slotTime < entryEnd;
         });
+    }
+
+    timeToMinutes(timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
     }
 
     getMakeupClassForTimeSlot(dayOfWeek, timeSlot, date) {
@@ -462,15 +479,14 @@ class TimetableApp {
         });
     }
 
-    createSubjectBlock(subject) {
-        const subjectId = subject.id || Object.keys(this.subjectsData).find(id => this.subjectsData[id] === subject);
+    createSubjectBlock(entry) {
         return `
-            <div class="subject-block group relative cursor-pointer" onclick="window.app.showSubjectDetails('${subjectId}')">
-                <div class="subject-name text-xs font-medium">${subject.name}</div>
-                <div class="subject-location text-xs text-gray-600">${subject.location}</div>
+            <div class="subject-block group relative cursor-pointer" onclick="window.app.showTimetableEntryDetails('${entry.id}')">
+                <div class="subject-name text-xs font-medium">${entry.subjectName}</div>
+                <div class="subject-location text-xs text-gray-600">${entry.location}</div>
                 <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button class="edit-subject-btn p-1 bg-white rounded shadow-sm text-gray-400 hover:text-blue-500 transition-colors" 
-                            onclick="event.stopPropagation(); window.app.openSubjectModal('${subjectId}')" title="แก้ไข">
+                            onclick="event.stopPropagation(); window.app.editTimetableEntry('${entry.id}')" title="แก้ไข">
                         <i class="fas fa-edit text-xs"></i>
                     </button>
                 </div>
@@ -487,21 +503,41 @@ class TimetableApp {
         `;
     }
 
-    onCellClick(cell, date) {
-        const day = parseInt(cell.dataset.day);
-        const time = cell.dataset.time;
+    onCellClick(cell, date, dayIndex, timeSlot) {
+        const dayName = this.daysOfWeek[dayIndex];
         
-        if (confirm(`เพิ่มรายวิชาสำหรับวัน${this.daysOfWeek[day]} เวลา ${time} หรือไม่?`)) {
-            this.openModal('addSubjectModal');
+        if (confirm(`เพิ่มรายวิชาสำหรับวัน${dayName} เวลา ${timeSlot} หรือไม่?`)) {
+            this.openSubjectModal();
             
-            // Pre-fill form
-            const form = document.getElementById('addSubjectForm');
+            // Pre-fill form with selected day and time
+            const form = document.getElementById('subjectForm');
             if (form) {
-                form.dayOfWeek.value = day;
-                form.startTime.value = time;
-                form.startDate.value = this.calendar.formatDateString(date);
+                // Check the corresponding day checkbox
+                const dayCheckbox = form.querySelector(`input[name="days"][value="${dayIndex}"]`);
+                if (dayCheckbox) {
+                    dayCheckbox.checked = true;
+                }
+                
+                // Set start time
+                const startTimeInput = form.querySelector('input[name="startTime"]');
+                if (startTimeInput) {
+                    startTimeInput.value = timeSlot;
+                }
+                
+                // Set default end time (1 hour later)
+                const endTimeInput = form.querySelector('input[name="endTime"]');
+                if (endTimeInput) {
+                    const endTime = this.addHoursToTime(timeSlot, 1);
+                    endTimeInput.value = endTime;
+                }
             }
         }
+    }
+
+    addHoursToTime(timeStr, hours) {
+        const [h, m] = timeStr.split(':').map(Number);
+        const newHours = h + hours;
+        return `${newHours.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     }
 
     // Modal Management
@@ -764,54 +800,70 @@ class TimetableApp {
             return;
         }
         
-        const formData = new FormData(e.target);
+        const form = e.target;
+        const formData = new FormData(form);
         const subjectId = formData.get('subjectId');
-        const subjectData = {
-            name: formData.get('subjectName'),
-            code: formData.get('subjectCode'),
+        
+        // Get selected days
+        const selectedDays = Array.from(form.querySelectorAll('input[name="days"]:checked')).map(cb => parseInt(cb.value));
+        
+        if (selectedDays.length === 0) {
+            this.showError('กรุณาเลือกวันที่เรียนอย่างน้อย 1 วัน');
+            return;
+        }
+        
+        const baseData = {
+            subjectName: formData.get('subjectName'),
+            subjectCode: formData.get('subjectCode'),
             instructor: formData.get('instructor'),
-            dayOfWeek: parseInt(formData.get('dayOfWeek')),
             startTime: formData.get('startTime'),
             endTime: formData.get('endTime'),
-            startDate: formData.get('startDate'),
-            endDate: formData.get('endDate'),
             location: formData.get('location'),
-            onlineLink: formData.get('onlineLink'),
-            notes: formData.get('notes'),
-            updatedAt: new Date().toISOString()
+            onlineLink: formData.get('onlineLink') || '',
+            notes: formData.get('notes') || ''
         };
-        
-        if (!subjectId) {
-            subjectData.createdAt = new Date().toISOString();
-        }
         
         try {
             if (subjectId) {
-                // Update existing subject
-                if (this.isFirebaseConnected) {
-                    await this.database.ref(`subjects/${this.currentTerm}/${subjectId}`).update(subjectData);
-                } else {
-                    await this.database.updateSubject(this.currentTerm, subjectId, subjectData);
-                    this.subjectsData[subjectId] = { ...subjectData, id: subjectId };
+                // Update existing timetable entry
+                // For updates, we need to find which day this entry belongs to
+                let entryDay = null;
+                let entryFound = false;
+                
+                for (const [dayName, entries] of Object.entries(this.timetableData)) {
+                    const entry = entries.find(e => e.id === subjectId);
+                    if (entry) {
+                        entryDay = dayName;
+                        entryFound = true;
+                        break;
+                    }
                 }
-                this.showSuccess('แก้ไขรายวิชาเรียบร้อยแล้ว');
+                
+                if (entryFound && entryDay) {
+                    await this.database.updateTimetableEntry(this.currentTerm, entryDay, subjectId, baseData);
+                    this.showSuccess('แก้ไขรายวิชาเรียบร้อยแล้ว');
+                } else {
+                    this.showError('ไม่พบรายวิชาที่ต้องการแก้ไข');
+                    return;
+                }
             } else {
-                // Add new subject
-                if (this.isFirebaseConnected) {
-                    await this.database.ref(`subjects/${this.currentTerm}`).push(subjectData);
-                } else {
-                    const newSubjectId = await this.database.addSubject(this.currentTerm, subjectData);
-                    this.subjectsData[newSubjectId] = { ...subjectData, id: newSubjectId };
+                // Add entry for each selected day
+                for (const dayIndex of selectedDays) {
+                    const dayName = this.dayNames[dayIndex];
+                    await this.database.addTimetableEntry(this.currentTerm, dayName, baseData);
                 }
-                this.showSuccess('เพิ่มรายวิชาเรียบร้อยแล้ว');
+                
+                this.showSuccess(`เพิ่มรายวิชาสำเร็จ (${selectedDays.length} วัน)`);
             }
             
+            // Reload data and close modal
             await this.loadAllData();
             this.closeModal('subjectModal');
-            this.generateTimetable();
+            form.reset();
+            
         } catch (error) {
-            console.error('Error handling subject:', error);
-            this.showError('เกิดข้อผิดพลาดในการจัดการรายวิชา');
+            console.error('Error saving subject:', error);
+            this.showError(error.message || 'เกิดข้อผิดพลาดในการบันทึกรายวิชา');
         }
     }
 
@@ -1226,6 +1278,133 @@ class TimetableApp {
             this.showSuccess('ลบรายวิชาเรียบร้อยแล้ว');
         } catch (error) {
             console.error('Error deleting subject:', error);
+            this.showError('เกิดข้อผิดพลาดในการลบรายวิชา');
+        }
+    }
+
+    showTimetableEntryDetails(entryId) {
+        let entry = null;
+        let dayName = '';
+        
+        // Find the entry in timetable data
+        for (const [day, entries] of Object.entries(this.timetableData)) {
+            const found = entries.find(e => e.id === entryId);
+            if (found) {
+                entry = found;
+                dayName = day;
+                break;
+            }
+        }
+        
+        if (!entry) return;
+        
+        const dayIndex = this.dayNames.indexOf(dayName);
+        const dayDisplayName = this.daysOfWeek[dayIndex];
+        
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">${entry.subjectName}</h3>
+                </div>
+                <div class="p-6 space-y-3">
+                    <p><strong>รหัสวิชา:</strong> ${entry.subjectCode}</p>
+                    <p><strong>อาจารย์:</strong> ${entry.instructor}</p>
+                    <p><strong>วัน:</strong> ${dayDisplayName}</p>
+                    <p><strong>เวลา:</strong> ${entry.startTime} - ${entry.endTime}</p>
+                    <p><strong>สถานที่:</strong> ${entry.location}</p>
+                    ${entry.onlineLink ? `<p><strong>ลิงก์:</strong> <a href="${entry.onlineLink}" target="_blank" class="text-blue-500 hover:underline">เข้าร่วมออนไลน์</a></p>` : ''}
+                    ${entry.notes ? `<p><strong>หมายเหตุ:</strong> ${entry.notes}</p>` : ''}
+                </div>
+                <div class="p-6 border-t border-gray-200 flex justify-between">
+                    <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        ปิด
+                    </button>
+                    <div class="space-x-2">
+                        <button onclick="window.app.editTimetableEntry('${entryId}'); this.closest('.fixed').remove();" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors">
+                            <i class="fas fa-edit mr-2"></i>แก้ไข
+                        </button>
+                        <button onclick="window.app.deleteTimetableEntry('${entryId}'); this.closest('.fixed').remove();" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors">
+                            <i class="fas fa-trash mr-2"></i>ลบ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+
+    editTimetableEntry(entryId) {
+        let entry = null;
+        let dayName = '';
+        
+        // Find the entry in timetable data
+        for (const [day, entries] of Object.entries(this.timetableData)) {
+            const found = entries.find(e => e.id === entryId);
+            if (found) {
+                entry = found;
+                dayName = day;
+                break;
+            }
+        }
+        
+        if (!entry) return;
+        
+        this.openSubjectModal(entryId);
+        
+        // Pre-fill form with entry data
+        const form = document.getElementById('subjectForm');
+        if (form) {
+            form.querySelector('input[name="subjectName"]').value = entry.subjectName || '';
+            form.querySelector('input[name="subjectCode"]').value = entry.subjectCode || '';
+            form.querySelector('input[name="instructor"]').value = entry.instructor || '';
+            form.querySelector('input[name="startTime"]').value = entry.startTime || '';
+            form.querySelector('input[name="endTime"]').value = entry.endTime || '';
+            form.querySelector('input[name="location"]').value = entry.location || '';
+            form.querySelector('input[name="onlineLink"]').value = entry.onlineLink || '';
+            form.querySelector('textarea[name="notes"]').value = entry.notes || '';
+            
+            // Check the day
+            const dayIndex = this.dayNames.indexOf(dayName);
+            const dayCheckbox = form.querySelector(`input[name="days"][value="${dayIndex}"]`);
+            if (dayCheckbox) {
+                dayCheckbox.checked = true;
+            }
+        }
+    }
+
+    async deleteTimetableEntry(entryId) {
+        if (!confirm('คุณแน่ใจหรือไม่ที่จะลบรายวิชานี้?')) return;
+        
+        let dayName = '';
+        
+        // Find which day this entry belongs to
+        for (const [day, entries] of Object.entries(this.timetableData)) {
+            const found = entries.find(e => e.id === entryId);
+            if (found) {
+                dayName = day;
+                break;
+            }
+        }
+        
+        if (!dayName) {
+            this.showError('ไม่พบรายวิชาที่ต้องการลบ');
+            return;
+        }
+        
+        try {
+            await this.database.deleteTimetableEntry(this.currentTerm, dayName, entryId);
+            this.showSuccess('ลบรายวิชาเรียบร้อยแล้ว');
+            await this.loadAllData();
+        } catch (error) {
+            console.error('Error deleting timetable entry:', error);
             this.showError('เกิดข้อผิดพลาดในการลบรายวิชา');
         }
     }

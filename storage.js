@@ -89,9 +89,57 @@ class LocalDatabase {
             }
         };
 
+        // Default timetable structure - organized by day
+        const defaultTimetable = {
+            monday: [
+                {
+                    id: 'calculus_mon',
+                    subjectName: 'แคลคูลัส 2',
+                    subjectCode: 'MATH201',
+                    instructor: 'อ.สมชาย',
+                    startTime: '09:00',
+                    endTime: '12:00',
+                    location: 'ห้อง 301',
+                    onlineLink: '',
+                    notes: 'นำเครื่องคิดเลข'
+                }
+            ],
+            tuesday: [
+                {
+                    id: 'cs_tue',
+                    subjectName: 'วิทยาศาสตร์คอมพิวเตอร์',
+                    subjectCode: 'CS101',
+                    instructor: 'อ.เทคโน',
+                    startTime: '10:00',
+                    endTime: '12:00',
+                    location: 'ห้องคอมพิวเตอร์ 1',
+                    onlineLink: 'https://meet.google.com/abc-defg-hij',
+                    notes: 'เตรียมแล็ปท็อป'
+                }
+            ],
+            wednesday: [],
+            thursday: [],
+            friday: [
+                {
+                    id: 'physics_fri',
+                    subjectName: 'ปฏิบัติการฟิสิกส์',
+                    subjectCode: 'PHYS105',
+                    instructor: 'อ.สมหญิง',
+                    startTime: '09:00',
+                    endTime: '12:00',
+                    location: 'ห้องปฏิบัติการ A',
+                    onlineLink: '',
+                    notes: 'ใส่เสื้อกาวน์ขาว'
+                }
+            ],
+            saturday: [],
+            sunday: []
+        };
+
         // Save default data
         this.setItem('terms', { [defaultTerm.id]: defaultTerm });
         this.setItem('subjects', { [defaultTerm.id]: defaultSubjects });
+        this.setItem('timetables', { [defaultTerm.id]: defaultTimetable });
         this.setItem('todos', { [defaultTerm.id]: defaultTodos });
         this.setItem('holidays', { [defaultTerm.id]: defaultHolidays });
         this.setItem('currentTerm', defaultTerm.id);
@@ -304,6 +352,91 @@ class LocalDatabase {
             console.error('Error importing data:', error);
             return false;
         }
+    }
+
+    // Timetable methods
+    async getTimetable(termId) {
+        const allTimetables = this.getItem('timetables') || {};
+        return allTimetables[termId] || {
+            monday: [], tuesday: [], wednesday: [], thursday: [], 
+            friday: [], saturday: [], sunday: []
+        };
+    }
+
+    async addTimetableEntry(termId, dayName, entryData) {
+        const allTimetables = this.getItem('timetables') || {};
+        if (!allTimetables[termId]) {
+            allTimetables[termId] = {
+                monday: [], tuesday: [], wednesday: [], thursday: [], 
+                friday: [], saturday: [], sunday: []
+            };
+        }
+        
+        // Check for time conflicts on this day
+        const dayEntries = allTimetables[termId][dayName] || [];
+        const hasConflict = this.checkTimeConflict(dayEntries, entryData);
+        
+        if (hasConflict) {
+            throw new Error(`มีรายวิชาทับซ้อนกันในวัน${dayName} เวลา ${entryData.startTime}-${entryData.endTime}`);
+        }
+        
+        const entryId = 'entry_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const newEntry = { ...entryData, id: entryId };
+        allTimetables[termId][dayName].push(newEntry);
+        
+        this.setItem('timetables', allTimetables);
+        return entryId;
+    }
+
+    async updateTimetableEntry(termId, dayName, entryId, entryData) {
+        const allTimetables = this.getItem('timetables') || {};
+        if (allTimetables[termId] && allTimetables[termId][dayName]) {
+            const dayEntries = allTimetables[termId][dayName];
+            const entryIndex = dayEntries.findIndex(entry => entry.id === entryId);
+            
+            if (entryIndex !== -1) {
+                // Check for conflicts excluding the current entry
+                const otherEntries = dayEntries.filter(entry => entry.id !== entryId);
+                const hasConflict = this.checkTimeConflict(otherEntries, entryData);
+                
+                if (hasConflict) {
+                    throw new Error(`มีรายวิชาทับซ้อนกันในวัน${dayName} เวลา ${entryData.startTime}-${entryData.endTime}`);
+                }
+                
+                dayEntries[entryIndex] = { ...dayEntries[entryIndex], ...entryData };
+                this.setItem('timetables', allTimetables);
+            }
+        }
+        return true;
+    }
+
+    async deleteTimetableEntry(termId, dayName, entryId) {
+        const allTimetables = this.getItem('timetables') || {};
+        if (allTimetables[termId] && allTimetables[termId][dayName]) {
+            allTimetables[termId][dayName] = allTimetables[termId][dayName].filter(entry => entry.id !== entryId);
+            this.setItem('timetables', allTimetables);
+        }
+        return true;
+    }
+
+    // Check for time conflicts
+    checkTimeConflict(existingEntries, newEntry) {
+        const newStart = this.timeToMinutes(newEntry.startTime);
+        const newEnd = this.timeToMinutes(newEntry.endTime);
+        
+        return existingEntries.some(entry => {
+            const existingStart = this.timeToMinutes(entry.startTime);
+            const existingEnd = this.timeToMinutes(entry.endTime);
+            
+            // Check if times overlap
+            return (newStart < existingEnd && newEnd > existingStart);
+        });
+    }
+
+    // Convert time string to minutes for comparison
+    timeToMinutes(timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
     }
 
     // Clear all data

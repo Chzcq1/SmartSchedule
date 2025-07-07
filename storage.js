@@ -141,6 +141,15 @@ class LocalDatabase {
         return termId;
     }
 
+    async updateTerm(termId, termData) {
+        const terms = await this.getTerms();
+        if (terms[termId]) {
+            terms[termId] = { ...terms[termId], ...termData };
+            this.setItem('terms', terms);
+        }
+        return true;
+    }
+
     async deleteTerm(termId) {
         const terms = await this.getTerms();
         delete terms[termId];
@@ -168,6 +177,15 @@ class LocalDatabase {
         allSubjects[termId][subjectId] = { ...subjectData, id: subjectId };
         this.setItem('subjects', allSubjects);
         return subjectId;
+    }
+
+    async updateSubject(termId, subjectId, subjectData) {
+        const allSubjects = this.getItem('subjects') || {};
+        if (allSubjects[termId] && allSubjects[termId][subjectId]) {
+            allSubjects[termId][subjectId] = { ...allSubjects[termId][subjectId], ...subjectData };
+            this.setItem('subjects', allSubjects);
+        }
+        return true;
     }
 
     async deleteSubject(termId, subjectId) {
@@ -229,6 +247,15 @@ class LocalDatabase {
         allHolidays[termId][holidayId] = { ...holidayData, id: holidayId };
         this.setItem('holidays', allHolidays);
         return holidayId;
+    }
+
+    async updateHoliday(termId, holidayId, holidayData) {
+        const allHolidays = this.getItem('holidays') || {};
+        if (allHolidays[termId] && allHolidays[termId][holidayId]) {
+            allHolidays[termId][holidayId] = { ...allHolidays[termId][holidayId], ...holidayData };
+            this.setItem('holidays', allHolidays);
+        }
+        return true;
     }
 
     async deleteHoliday(termId, holidayId) {

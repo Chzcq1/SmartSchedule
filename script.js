@@ -134,23 +134,39 @@ class TimetableApp {
         document.getElementById('prevWeek')?.addEventListener('click', () => this.navigateWeek(-1));
         document.getElementById('nextWeek')?.addEventListener('click', () => this.navigateWeek(1));
         
-        // Modal buttons
-        document.getElementById('addTermBtn')?.addEventListener('click', () => this.openModal('addTermModal'));
-        document.getElementById('addSubjectBtn')?.addEventListener('click', () => this.openModal('addSubjectModal'));
-        document.getElementById('addTodoBtn')?.addEventListener('click', () => this.openModal('addTodoModal'));
-        document.getElementById('addHolidayBtn')?.addEventListener('click', () => this.openModal('addHolidayModal'));
+        // Modal buttons (updated modal names)
+        document.getElementById('addTermBtn')?.addEventListener('click', () => this.openTermModal());
+        document.getElementById('addSubjectBtn')?.addEventListener('click', () => this.openSubjectModal());
+        document.getElementById('addTodoBtn')?.addEventListener('click', () => this.openTodoModal());
+        document.getElementById('addHolidayBtn')?.addEventListener('click', () => this.openHolidayModal());
         
-        // Theme selector
+        // Theme selectors (both desktop and mobile)
         const themeSelector = document.getElementById('themeSelector');
+        const mobileThemeSelector = document.getElementById('mobileThemeSelector');
+        
         if (themeSelector) {
-            themeSelector.addEventListener('change', (e) => this.changeTheme(e.target.value));
+            themeSelector.addEventListener('change', (e) => {
+                this.changeTheme(e.target.value);
+                if (mobileThemeSelector) mobileThemeSelector.value = e.target.value;
+            });
         }
         
-        // Form submissions
-        document.getElementById('addTermForm')?.addEventListener('submit', (e) => this.handleAddTerm(e));
-        document.getElementById('addSubjectForm')?.addEventListener('submit', (e) => this.handleAddSubject(e));
-        document.getElementById('addTodoForm')?.addEventListener('submit', (e) => this.handleAddTodo(e));
-        document.getElementById('addHolidayForm')?.addEventListener('submit', (e) => this.handleAddHoliday(e));
+        if (mobileThemeSelector) {
+            mobileThemeSelector.addEventListener('change', (e) => {
+                this.changeTheme(e.target.value);
+                if (themeSelector) themeSelector.value = e.target.value;
+            });
+        }
+        
+        // Term management buttons
+        document.getElementById('editTermBtn')?.addEventListener('click', () => this.editCurrentTerm());
+        document.getElementById('deleteTermBtn')?.addEventListener('click', () => this.deleteCurrentTerm());
+        
+        // Form submissions (updated modal IDs)
+        document.getElementById('termForm')?.addEventListener('submit', (e) => this.handleTermForm(e));
+        document.getElementById('subjectForm')?.addEventListener('submit', (e) => this.handleSubjectForm(e));
+        document.getElementById('todoForm')?.addEventListener('submit', (e) => this.handleTodoForm(e));
+        document.getElementById('holidayForm')?.addEventListener('submit', (e) => this.handleHolidayForm(e));
         
         // Modal close functionality
         document.querySelectorAll('.modal').forEach(modal => {
@@ -447,10 +463,17 @@ class TimetableApp {
     }
 
     createSubjectBlock(subject) {
+        const subjectId = subject.id || Object.keys(this.subjectsData).find(id => this.subjectsData[id] === subject);
         return `
-            <div class="subject-block" onclick="window.app.showSubjectDetails('${subject.id || Object.keys(this.subjectsData).find(id => this.subjectsData[id] === subject)}')">
-                <div class="subject-name">${subject.name}</div>
-                <div class="subject-location">${subject.location}</div>
+            <div class="subject-block group relative cursor-pointer" onclick="window.app.showSubjectDetails('${subjectId}')">
+                <div class="subject-name text-xs font-medium">${subject.name}</div>
+                <div class="subject-location text-xs text-gray-600">${subject.location}</div>
+                <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button class="edit-subject-btn p-1 bg-white rounded shadow-sm text-gray-400 hover:text-blue-500 transition-colors" 
+                            onclick="event.stopPropagation(); window.app.openSubjectModal('${subjectId}')" title="แก้ไข">
+                        <i class="fas fa-edit text-xs"></i>
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -502,47 +525,238 @@ class TimetableApp {
         }
     }
 
+    // Specific Modal Handlers
+    openTermModal(termId = null) {
+        const modal = document.getElementById('termModal');
+        const title = document.getElementById('termModalTitle');
+        const form = document.getElementById('termForm');
+        
+        if (termId) {
+            // Edit mode
+            title.textContent = 'แก้ไขเทอม';
+            const terms = this.isFirebaseConnected ? {} : this.database.getTerms();
+            const termData = this.isFirebaseConnected ? null : terms[termId];
+            
+            if (termData) {
+                form.termId.value = termId;
+                form.termName.value = termData.name;
+                form.termStartDate.value = termData.startDate;
+                form.termEndDate.value = termData.endDate;
+            }
+        } else {
+            // Add mode
+            title.textContent = 'เพิ่มเทอมใหม่';
+            form.reset();
+        }
+        
+        this.openModal('termModal');
+    }
+
+    openSubjectModal(subjectId = null) {
+        const modal = document.getElementById('subjectModal');
+        const title = document.getElementById('subjectModalTitle');
+        const form = document.getElementById('subjectForm');
+        
+        if (subjectId) {
+            // Edit mode
+            title.textContent = 'แก้ไขรายวิชา';
+            const subject = this.subjectsData[subjectId];
+            
+            if (subject) {
+                form.subjectId.value = subjectId;
+                form.subjectName.value = subject.name;
+                form.subjectCode.value = subject.code;
+                form.instructor.value = subject.instructor;
+                form.dayOfWeek.value = subject.dayOfWeek;
+                form.startTime.value = subject.startTime;
+                form.endTime.value = subject.endTime;
+                form.startDate.value = subject.startDate;
+                form.endDate.value = subject.endDate;
+                form.location.value = subject.location;
+                form.onlineLink.value = subject.onlineLink || '';
+                form.notes.value = subject.notes || '';
+            }
+        } else {
+            // Add mode
+            title.textContent = 'เพิ่มรายวิชา';
+            form.reset();
+        }
+        
+        this.openModal('subjectModal');
+    }
+
+    openTodoModal(todoId = null) {
+        const modal = document.getElementById('todoModal');
+        const title = document.getElementById('todoModalTitle');
+        const form = document.getElementById('todoForm');
+        
+        if (todoId) {
+            // Edit mode
+            title.textContent = 'แก้ไขสิ่งที่ต้องทำ';
+            const todo = this.todosData[todoId];
+            
+            if (todo) {
+                form.todoId.value = todoId;
+                form.todoText.value = todo.text;
+                form.todoDate.value = todo.date;
+                form.todoPriority.value = todo.priority;
+            }
+        } else {
+            // Add mode
+            title.textContent = 'เพิ่มสิ่งที่ต้องทำ';
+            form.reset();
+        }
+        
+        this.openModal('todoModal');
+    }
+
+    openHolidayModal(holidayId = null) {
+        const modal = document.getElementById('holidayModal');
+        const title = document.getElementById('holidayModalTitle');
+        const form = document.getElementById('holidayForm');
+        const makeupFields = document.getElementById('makeupFields');
+        
+        if (holidayId) {
+            // Edit mode
+            title.textContent = 'แก้ไขวันหยุด';
+            const holiday = this.holidaysData[holidayId];
+            
+            if (holiday) {
+                form.holidayId.value = holidayId;
+                form.holidayName.value = holiday.name;
+                form.holidayDate.value = holiday.date;
+                form.hasMakeup.checked = holiday.hasMakeup;
+                
+                if (holiday.hasMakeup) {
+                    makeupFields.classList.remove('hidden');
+                    form.makeupDate.value = holiday.makeupDate || '';
+                    form.makeupStartTime.value = holiday.makeupStartTime || '';
+                    form.makeupEndTime.value = holiday.makeupEndTime || '';
+                    form.makeupLocation.value = holiday.makeupLocation || '';
+                }
+            }
+        } else {
+            // Add mode
+            title.textContent = 'เพิ่มวันหยุด';
+            form.reset();
+            makeupFields.classList.add('hidden');
+        }
+        
+        this.openModal('holidayModal');
+    }
+
+    // Term Management Methods
+    async editCurrentTerm() {
+        if (!this.currentTerm) {
+            this.showError('กรุณาเลือกเทอมก่อน');
+            return;
+        }
+        this.openTermModal(this.currentTerm);
+    }
+
+    async deleteCurrentTerm() {
+        if (!this.currentTerm) {
+            this.showError('กรุณาเลือกเทอมก่อน');
+            return;
+        }
+
+        const termSelect = document.getElementById('termSelect');
+        const termName = termSelect.options[termSelect.selectedIndex]?.text;
+
+        if (!confirm(`คุณต้องการลบเทอม "${termName}" หรือไม่?\n\nการลบเทอมจะลบข้อมูลทั้งหมดในเทอมนี้ รวมถึงรายวิชา วันหยุด และสิ่งที่ต้องทำ`)) {
+            return;
+        }
+
+        try {
+            if (this.isFirebaseConnected) {
+                await this.database.ref(`terms/${this.currentTerm}`).remove();
+                await this.database.ref(`subjects/${this.currentTerm}`).remove();
+                await this.database.ref(`todos/${this.currentTerm}`).remove();
+                await this.database.ref(`holidays/${this.currentTerm}`).remove();
+            } else {
+                await this.database.deleteTerm(this.currentTerm);
+            }
+
+            // Reset current term
+            this.currentTerm = null;
+            await this.setCurrentTerm(null);
+
+            // Reload terms and reset UI
+            await this.loadTerms();
+            this.subjectsData = {};
+            this.todosData = {};
+            this.holidaysData = {};
+            this.generateTimetable();
+            this.updateTodoList();
+            this.updateHolidayList();
+
+            this.showSuccess('ลบเทอมเรียบร้อยแล้ว');
+        } catch (error) {
+            console.error('Error deleting term:', error);
+            this.showError('เกิดข้อผิดพลาดในการลบเทอม');
+        }
+    }
+
     // Form Handlers
-    async handleAddTerm(e) {
+    async handleTermForm(e) {
         e.preventDefault();
         
         const formData = new FormData(e.target);
+        const termId = formData.get('termId');
         const termData = {
             name: formData.get('termName'),
             startDate: formData.get('termStartDate'),
             endDate: formData.get('termEndDate'),
-            createdAt: new Date().toISOString()
+            updatedAt: new Date().toISOString()
         };
         
+        if (!termId) {
+            termData.createdAt = new Date().toISOString();
+        }
+        
         try {
-            let termId;
-            if (this.isFirebaseConnected) {
-                const termRef = await this.database.ref('terms').push(termData);
-                termId = termRef.key;
+            let resultTermId;
+            if (termId) {
+                // Update existing term
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`terms/${termId}`).update(termData);
+                } else {
+                    await this.database.updateTerm(termId, termData);
+                }
+                resultTermId = termId;
+                this.showSuccess('แก้ไขเทอมเรียบร้อยแล้ว');
             } else {
-                termId = await this.database.addTerm(termData);
+                // Add new term
+                if (this.isFirebaseConnected) {
+                    const termRef = await this.database.ref('terms').push(termData);
+                    resultTermId = termRef.key;
+                } else {
+                    resultTermId = await this.database.addTerm(termData);
+                }
+                this.showSuccess('เพิ่มเทอมเรียบร้อยแล้ว');
             }
             
-            this.closeModal('addTermModal');
+            this.closeModal('termModal');
             await this.loadTerms();
             
-            // Select the new term
+            // Select the term
             const termSelect = document.getElementById('termSelect');
             if (termSelect) {
-                termSelect.value = termId;
-                await this.setCurrentTerm(termId);
+                termSelect.value = resultTermId;
+                await this.setCurrentTerm(resultTermId);
                 await this.loadAllData();
                 this.generateTimetable();
+                this.updateTodoList();
+                this.updateHolidayList();
             }
             
-            this.showSuccess('เพิ่มเทอมเรียบร้อยแล้ว');
         } catch (error) {
-            console.error('Error adding term:', error);
-            this.showError('เกิดข้อผิดพลาดในการเพิ่มเทอม');
+            console.error('Error handling term:', error);
+            this.showError('เกิดข้อผิดพลาดในการจัดการเทอม');
         }
     }
 
-    async handleAddSubject(e) {
+    async handleSubjectForm(e) {
         e.preventDefault();
         
         if (!this.currentTerm) {
@@ -551,6 +765,7 @@ class TimetableApp {
         }
         
         const formData = new FormData(e.target);
+        const subjectId = formData.get('subjectId');
         const subjectData = {
             name: formData.get('subjectName'),
             code: formData.get('subjectCode'),
@@ -563,28 +778,44 @@ class TimetableApp {
             location: formData.get('location'),
             onlineLink: formData.get('onlineLink'),
             notes: formData.get('notes'),
-            createdAt: new Date().toISOString()
+            updatedAt: new Date().toISOString()
         };
         
+        if (!subjectId) {
+            subjectData.createdAt = new Date().toISOString();
+        }
+        
         try {
-            if (this.isFirebaseConnected) {
-                await this.database.ref(`subjects/${this.currentTerm}`).push(subjectData);
+            if (subjectId) {
+                // Update existing subject
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`subjects/${this.currentTerm}/${subjectId}`).update(subjectData);
+                } else {
+                    await this.database.updateSubject(this.currentTerm, subjectId, subjectData);
+                    this.subjectsData[subjectId] = { ...subjectData, id: subjectId };
+                }
+                this.showSuccess('แก้ไขรายวิชาเรียบร้อยแล้ว');
             } else {
-                const subjectId = await this.database.addSubject(this.currentTerm, subjectData);
-                this.subjectsData[subjectId] = { ...subjectData, id: subjectId };
+                // Add new subject
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`subjects/${this.currentTerm}`).push(subjectData);
+                } else {
+                    const newSubjectId = await this.database.addSubject(this.currentTerm, subjectData);
+                    this.subjectsData[newSubjectId] = { ...subjectData, id: newSubjectId };
+                }
+                this.showSuccess('เพิ่มรายวิชาเรียบร้อยแล้ว');
             }
             
             await this.loadAllData();
-            this.closeModal('addSubjectModal');
+            this.closeModal('subjectModal');
             this.generateTimetable();
-            this.showSuccess('เพิ่มรายวิชาเรียบร้อยแล้ว');
         } catch (error) {
-            console.error('Error adding subject:', error);
-            this.showError('เกิดข้อผิดพลาดในการเพิ่มรายวิชา');
+            console.error('Error handling subject:', error);
+            this.showError('เกิดข้อผิดพลาดในการจัดการรายวิชา');
         }
     }
 
-    async handleAddTodo(e) {
+    async handleTodoForm(e) {
         e.preventDefault();
         
         if (!this.currentTerm) {
@@ -593,33 +824,53 @@ class TimetableApp {
         }
         
         const formData = new FormData(e.target);
+        const todoId = formData.get('todoId');
         const todoData = {
             text: formData.get('todoText'),
             date: formData.get('todoDate'),
             priority: formData.get('todoPriority'),
-            completed: false,
-            createdAt: new Date().toISOString()
+            updatedAt: new Date().toISOString()
         };
         
+        if (!todoId) {
+            todoData.completed = false;
+            todoData.createdAt = new Date().toISOString();
+        } else {
+            // Preserve completed status for existing todos
+            todoData.completed = this.todosData[todoId]?.completed || false;
+        }
+        
         try {
-            if (this.isFirebaseConnected) {
-                await this.database.ref(`todos/${this.currentTerm}`).push(todoData);
+            if (todoId) {
+                // Update existing todo
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`todos/${this.currentTerm}/${todoId}`).update(todoData);
+                } else {
+                    await this.database.updateTodo(this.currentTerm, todoId, todoData);
+                    this.todosData[todoId] = { ...todoData, id: todoId };
+                }
+                this.showSuccess('แก้ไขรายการเรียบร้อยแล้ว');
             } else {
-                const todoId = await this.database.addTodo(this.currentTerm, todoData);
-                this.todosData[todoId] = { ...todoData, id: todoId };
+                // Add new todo
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`todos/${this.currentTerm}`).push(todoData);
+                } else {
+                    const newTodoId = await this.database.addTodo(this.currentTerm, todoData);
+                    this.todosData[newTodoId] = { ...todoData, id: newTodoId };
+                }
+                this.showSuccess('เพิ่มรายการเรียบร้อยแล้ว');
             }
             
             await this.loadAllData();
-            this.closeModal('addTodoModal');
+            this.closeModal('todoModal');
             this.updateTodoList();
-            this.showSuccess('เพิ่มรายการสำเร็จแล้ว');
         } catch (error) {
-            console.error('Error adding todo:', error);
-            this.showError('เกิดข้อผิดพลาดในการเพิ่มรายการ');
+            console.error('Error handling todo:', error);
+            this.showError('เกิดข้อผิดพลาดในการจัดการรายการ');
         }
     }
 
-    async handleAddHoliday(e) {
+    async handleHolidayForm(e) {
         e.preventDefault();
         
         if (!this.currentTerm) {
@@ -628,6 +879,7 @@ class TimetableApp {
         }
         
         const formData = new FormData(e.target);
+        const holidayId = formData.get('holidayId');
         const holidayData = {
             name: formData.get('holidayName'),
             date: formData.get('holidayDate'),
@@ -636,25 +888,41 @@ class TimetableApp {
             makeupStartTime: formData.get('makeupStartTime') || null,
             makeupEndTime: formData.get('makeupEndTime') || null,
             makeupLocation: formData.get('makeupLocation') || null,
-            createdAt: new Date().toISOString()
+            updatedAt: new Date().toISOString()
         };
         
+        if (!holidayId) {
+            holidayData.createdAt = new Date().toISOString();
+        }
+        
         try {
-            if (this.isFirebaseConnected) {
-                await this.database.ref(`holidays/${this.currentTerm}`).push(holidayData);
+            if (holidayId) {
+                // Update existing holiday
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`holidays/${this.currentTerm}/${holidayId}`).update(holidayData);
+                } else {
+                    await this.database.updateHoliday(this.currentTerm, holidayId, holidayData);
+                    this.holidaysData[holidayId] = { ...holidayData, id: holidayId };
+                }
+                this.showSuccess('แก้ไขวันหยุดเรียบร้อยแล้ว');
             } else {
-                const holidayId = await this.database.addHoliday(this.currentTerm, holidayData);
-                this.holidaysData[holidayId] = { ...holidayData, id: holidayId };
+                // Add new holiday
+                if (this.isFirebaseConnected) {
+                    await this.database.ref(`holidays/${this.currentTerm}`).push(holidayData);
+                } else {
+                    const newHolidayId = await this.database.addHoliday(this.currentTerm, holidayData);
+                    this.holidaysData[newHolidayId] = { ...holidayData, id: newHolidayId };
+                }
+                this.showSuccess('เพิ่มวันหยุดเรียบร้อยแล้ว');
             }
             
             await this.loadAllData();
-            this.closeModal('addHolidayModal');
+            this.closeModal('holidayModal');
             this.updateHolidayList();
             this.generateTimetable();
-            this.showSuccess('เพิ่มวันหยุดเรียบร้อยแล้ว');
         } catch (error) {
-            console.error('Error adding holiday:', error);
-            this.showError('เกิดข้อผิดพลาดในการเพิ่มวันหยุด');
+            console.error('Error handling holiday:', error);
+            this.showError('เกิดข้อผิดพลาดในการจัดการวันหยุด');
         }
     }
 
@@ -681,16 +949,27 @@ class TimetableApp {
         
         container.innerHTML = todos.map(([todoId, todo]) => `
             <div class="todo-item ${todo.completed ? 'completed' : ''}" data-priority="${todo.priority}">
-                <div class="todo-content">
+                <div class="todo-content flex items-center">
                     <input type="checkbox" ${todo.completed ? 'checked' : ''} 
                            onchange="window.app.toggleTodo('${todoId}', this.checked)"
                            class="mr-3">
-                    <span class="todo-text flex-1">${todo.text}</span>
-                    <span class="todo-date text-sm text-gray-500">${this.calendar.getRelativeDateString(todo.date)}</span>
-                    <span class="todo-priority" data-priority="${todo.priority}">${this.getPriorityText(todo.priority)}</span>
-                    <button class="delete-btn ml-2" onclick="window.app.deleteTodo('${todoId}')">
-                        <i class="fas fa-trash text-red-500"></i>
-                    </button>
+                    <div class="flex-1">
+                        <div class="todo-text font-medium">${todo.text}</div>
+                        <div class="flex items-center space-x-2 text-sm text-gray-500 mt-1">
+                            <span class="todo-date">${this.calendar.getRelativeDateString(todo.date)}</span>
+                            <span class="todo-priority" data-priority="${todo.priority}">${this.getPriorityText(todo.priority)}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1 ml-2">
+                        <button class="edit-btn p-1 text-gray-400 hover:text-blue-500 transition-colors" 
+                                onclick="window.app.openTodoModal('${todoId}')" title="แก้ไข">
+                            <i class="fas fa-edit text-sm"></i>
+                        </button>
+                        <button class="delete-btn p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                                onclick="window.app.deleteTodo('${todoId}')" title="ลบ">
+                            <i class="fas fa-trash text-sm"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         `).join('');
@@ -711,14 +990,14 @@ class TimetableApp {
         
         container.innerHTML = holidays.map(([holidayId, holiday]) => `
             <div class="holiday-item">
-                <div class="holiday-content">
-                    <div>
-                        <div class="holiday-name">${holiday.name}</div>
-                        <div class="holiday-date">${this.calendar.formatThaiDate(holiday.date)}</div>
+                <div class="holiday-content flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="holiday-name font-medium text-gray-900">${holiday.name}</div>
+                        <div class="holiday-date text-sm text-gray-500 mt-1">${this.calendar.formatThaiDate(holiday.date)}</div>
                         ${holiday.hasMakeup ? `
-                            <div class="makeup-class">
-                                <div class="makeup-title">การชดเชย:</div>
-                                <div class="makeup-details">
+                            <div class="makeup-class mt-2 p-2 bg-orange-50 rounded-lg">
+                                <div class="makeup-title text-xs font-medium text-orange-800 mb-1">การชดเชย:</div>
+                                <div class="makeup-details text-xs text-orange-700">
                                     วันที่: ${this.calendar.formatThaiDate(holiday.makeupDate)}<br>
                                     เวลา: ${holiday.makeupStartTime} - ${holiday.makeupEndTime}<br>
                                     สถานที่: ${holiday.makeupLocation || 'ตามปกติ'}
@@ -726,9 +1005,16 @@ class TimetableApp {
                             </div>
                         ` : ''}
                     </div>
-                    <button class="delete-btn" onclick="window.app.deleteHoliday('${holidayId}')">
-                        <i class="fas fa-trash text-red-500"></i>
-                    </button>
+                    <div class="flex items-center space-x-1 ml-2">
+                        <button class="edit-btn p-1 text-gray-400 hover:text-blue-500 transition-colors" 
+                                onclick="window.app.openHolidayModal('${holidayId}')" title="แก้ไข">
+                            <i class="fas fa-edit text-sm"></i>
+                        </button>
+                        <button class="delete-btn p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                                onclick="window.app.deleteHoliday('${holidayId}')" title="ลบ">
+                            <i class="fas fa-trash text-sm"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         `).join('');

@@ -4,110 +4,186 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ตารางเรียน - Interactive Timetable</title>
-    <meta name="firebase-project-id" content="ENV_FIREBASE_PROJECT_ID">
-    <meta name="firebase-api-key" content="ENV_FIREBASE_API_KEY">
-    <meta name="firebase-app-id" content="ENV_FIREBASE_APP_ID">
+    <meta name="description" content="ระบบตารางเรียนอัตโนมัติ รองรับหลายเทอม พร้อมระบบวันหยุดและชดเชย">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sarabun': ['Sarabun', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
+<body class="bg-gray-50 font-sarabun">
+    
     <!-- Loading Spinner -->
-    <div id="loading" class="loading">
-        <div class="spinner"></div>
-        <p>รอแปบนึงจ้า...</p>
+    <div id="loading" class="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 hidden">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
+            <p class="text-gray-600 text-lg">กำลังโหลด...</p>
+        </div>
+    </div>
+
+    <!-- Theme Selector -->
+    <div class="fixed top-4 right-4 z-40">
+        <div class="bg-white rounded-lg shadow-lg p-3">
+            <label class="block text-sm font-medium text-gray-700 mb-2">เลือกธีม</label>
+            <select id="themeSelector" class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <option value="default">ธีมเริ่มต้น</option>
+                <option value="blue">ธีมสีฟ้า</option>
+                <option value="green">ธีมสีเขียว</option>
+                <option value="purple">ธีมสีม่วง</option>
+                <option value="orange">ธีมสีส้म</option>
+                <option value="pink">ธีมสีชมพู</option>
+                <option value="dark">ธีมมืด</option>
+            </select>
+        </div>
     </div>
 
     <!-- Main Container -->
-    <div class="container">
+    <div class="min-h-screen">
         <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1><i class="fas fa-calendar-alt"></i> ตารางเรียน SUT+</h1>
-                <div class="header-controls">
-                    <select id="termSelect" class="term-select">
-                        <option value="">เลือกเทอม</option>
-                    </select>
-                    <button id="addTermBtn" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> เพิ่มเทอม
-                    </button>
-                    <button id="addSubjectBtn" class="btn btn-secondary">
-                        <i class="fas fa-book"></i> เพิ่มรายวิชา
-                    </button>
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <!-- Logo -->
+                    <div class="flex items-center">
+                        <i class="fas fa-graduation-cap text-primary-500 text-2xl mr-3"></i>
+                        <h1 class="text-xl font-bold text-gray-900">ตารางเรียน SUT+</h1>
+                    </div>
+                    
+                    <!-- Controls -->
+                    <div class="flex items-center space-x-4">
+                        <select id="termSelect" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                            <option value="">เลือกเทอม</option>
+                        </select>
+                        <button id="addTermBtn" class="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-plus mr-2"></i>เพิ่มเทอม
+                        </button>
+                        <button id="addSubjectBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-book mr-2"></i>เพิ่มรายวิชา
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
 
         <!-- Main Content -->
-        <main class="main-content">
-            <!-- Current Date Info -->
-            <div class="date-info">
-                <div class="current-date">
-                    <i class="fas fa-calendar-day"></i>
-                    <span id="currentDate"></span>
-                </div>
-                <div class="week-navigation">
-                    <button id="prevWeek" class="btn btn-nav">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <span id="weekRange"></span>
-                    <button id="nextWeek" class="btn btn-nav">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Status Bar -->
+            <div class="mb-6 bg-white rounded-lg shadow-sm p-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex items-center text-gray-700 mb-4 sm:mb-0">
+                        <i class="fas fa-calendar-day mr-2 text-primary-500"></i>
+                        <span id="currentDate" class="font-medium"></span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="prevWeek" class="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span id="weekRange" class="px-4 py-2 bg-primary-50 text-primary-700 rounded-lg font-medium"></span>
+                        <button id="nextWeek" class="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Timetable -->
-            <div class="timetable-container">
-                <div class="timetable-wrapper">
-                    <table id="timetable" class="timetable">
-                        <thead>
+            <!-- Timetable Grid -->
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-8">
+                <div class="overflow-x-auto">
+                    <table id="timetable" class="w-full">
+                        <thead class="bg-gray-50">
                             <tr>
-                                <th class="time-column">เวลา</th>
-                                <th>จันทร์</th>
-                                <th>อังคาร</th>
-                                <th>พุธ</th>
-                                <th>พฤหัสบดี</th>
-                                <th>ศุกร์</th>
-                                <th>เสาร์</th>
-                                <th>อาทิตย์</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เวลา</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">อาทิตย์</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">จันทร์</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">อังคาร</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">พุธ</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">พฤหัสบดี</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ศุกร์</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">เสาร์</th>
                             </tr>
                         </thead>
                         <tbody id="timetableBody">
-                            <!-- Timetable rows will be generated here -->
+                            <!-- Dynamic content will be inserted here -->
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Daily Todo Section -->
-            <div class="todo-section">
-                <div class="todo-header">
-                    <h3><i class="fas fa-tasks"></i> สิ่งที่ต้องทำวันนี้</h3>
-                    <button id="addTodoBtn" class="btn btn-small">
-                        <i class="fas fa-plus"></i> เพิ่ม
-                    </button>
-                </div>
-                <div class="todo-list" id="todoList">
-                    <div class="no-todos">
-                        <i class="fas fa-check-circle"></i>
-                        <p>ไม่มีสิ่งที่ต้องทำในวันนี้</p>
+            <!-- Dashboard Cards -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- To-Do List -->
+                <div class="bg-white rounded-lg shadow-sm">
+                    <div class="p-6 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-medium text-gray-900">
+                                <i class="fas fa-tasks mr-2 text-primary-500"></i>สิ่งที่ต้องทำ
+                            </h3>
+                            <button id="addTodoBtn" class="bg-primary-500 hover:bg-primary-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors">
+                                <i class="fas fa-plus mr-1"></i>เพิ่ม
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <div id="todoList" class="space-y-3">
+                            <!-- Dynamic content will be inserted here -->
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Holiday Management -->
-            <div class="holiday-section">
-                <div class="holiday-header">
-                    <h3><i class="fas fa-umbrella-beach"></i> วันหยุด</h3>
-                    <button id="addHolidayBtn" class="btn btn-small">
-                        <i class="fas fa-plus"></i> เพิ่มวันหยุด
-                    </button>
-                </div>
-                <div class="holiday-list" id="holidayList">
-                    <div class="no-holidays">
-                        <i class="fas fa-calendar-check"></i>
-                        <p>ไม่มีวันหยุดที่กำหนด</p>
+                <!-- Holidays & Makeup Classes -->
+                <div class="bg-white rounded-lg shadow-sm">
+                    <div class="p-6 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-medium text-gray-900">
+                                <i class="fas fa-calendar-times mr-2 text-red-500"></i>วันหยุด & ชดเชย
+                            </h3>
+                            <button id="addHolidayBtn" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors">
+                                <i class="fas fa-plus mr-1"></i>เพิ่ม
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <div id="holidayList" class="space-y-3">
+                            <!-- Dynamic content will be inserted here -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -116,34 +192,32 @@
 
     <!-- Modals -->
     <!-- Add Term Modal -->
-    <div id="addTermModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>เพิ่มเทอมใหม่</h3>
-                <button class="close-btn" onclick="closeModal('addTermModal')">
-                    <i class="fas fa-times"></i>
-                </button>
+    <div id="addTermModal" class="fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">เพิ่มเทอมใหม่</h3>
             </div>
-            <form id="addTermForm">
-                <div class="form-group">
-                    <label for="termName">ชื่อเทอม</label>
-                    <input type="text" id="termName" name="termName" required 
-                           placeholder="เช่น เทอม 1/2567">
+            <form id="addTermForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อเทอม</label>
+                    <input type="text" name="termName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น เทอม 1/2568">
                 </div>
-                <div class="form-group">
-                    <label for="termStartDate">วันเริ่มเทอม</label>
-                    <input type="date" id="termStartDate" name="termStartDate" required>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันเริ่มต้น</label>
+                        <input type="date" name="termStartDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันสิ้นสุด</label>
+                        <input type="date" name="termEndDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="termEndDate">วันสิ้นสุดเทอม</label>
-                    <input type="date" id="termEndDate" name="termEndDate" required>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('addTermModal')">
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('addTermModal')" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         ยกเลิก
                     </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> บันทึก
+                    <button type="submit" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>บันทึก
                     </button>
                 </div>
             </form>
@@ -151,136 +225,112 @@
     </div>
 
     <!-- Add Subject Modal -->
-    <div id="addSubjectModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>เพิ่มรายวิชา</h3>
-                <button class="close-btn" onclick="closeModal('addSubjectModal')">
-                    <i class="fas fa-times"></i>
-                </button>
+    <div id="addSubjectModal" class="fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">เพิ่มรายวิชา</h3>
             </div>
-            <form id="addSubjectForm">
-                <div class="form-group">
-                    <label for="subjectName">ชื่อวิชา</label>
-                    <input type="text" id="subjectName" name="subjectName" required 
-                           placeholder="เช่น วิทยาศาสตร์คอมพิวเตอร์">
+            <form id="addSubjectForm" class="p-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อวิชา</label>
+                        <input type="text" name="subjectName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น แคลคูลัส 2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">รหัสวิชา</label>
+                        <input type="text" name="subjectCode" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น MATH201">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="subjectCode">รหัสวิชา</label>
-                    <input type="text" id="subjectCode" name="subjectCode" 
-                           placeholder="เช่น CS101">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">อาจารย์ผู้สอน</label>
+                    <input type="text" name="instructor" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น อ.สมชาย">
                 </div>
-                <div class="form-group">
-                    <label for="instructor">อาจารย์ผู้สอน</label>
-                    <input type="text" id="instructor" name="instructor" 
-                           placeholder="เช่น อ.สมชาย">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="dayOfWeek">วันในสัปดาห์</label>
-                        <select id="dayOfWeek" name="dayOfWeek" required>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันในสัปดาห์</label>
+                        <select name="dayOfWeek" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                             <option value="">เลือกวัน</option>
+                            <option value="0">อาทิตย์</option>
                             <option value="1">จันทร์</option>
                             <option value="2">อังคาร</option>
                             <option value="3">พุธ</option>
                             <option value="4">พฤหัสบดี</option>
                             <option value="5">ศุกร์</option>
                             <option value="6">เสาร์</option>
-                            <option value="0">อาทิตย์</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="startTime">เวลาเริ่ม</label>
-                        <input type="time" id="startTime" name="startTime" required>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">เวลาเริ่ม</label>
+                        <input type="time" name="startTime" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                     </div>
-                    <div class="form-group">
-                        <label for="endTime">เวลาสิ้นสุด</label>
-                        <input type="time" id="endTime" name="endTime" required>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">เวลาสิ้นสุด</label>
+                        <input type="time" name="endTime" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="location">สถานที่</label>
-                    <input type="text" id="location" name="location" 
-                           placeholder="เช่น ห้อง 101 หรือ Online">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันที่เริ่มเรียน</label>
+                        <input type="date" name="startDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันที่สิ้นสุด</label>
+                        <input type="date" name="endDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="onlineLink">ลิงก์เรียนออนไลน์</label>
-                    <input type="url" id="onlineLink" name="onlineLink" 
-                           placeholder="https://...">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">สถานที่</label>
+                    <input type="text" name="location" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น ห้อง 301">
                 </div>
-                <div class="form-group">
-                    <label for="notes">หมายเหตุ</label>
-                    <textarea id="notes" name="notes" rows="3" 
-                              placeholder="ข้อมูลเพิ่มเติม..."></textarea>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ลิงก์ออนไลน์ (ถ้ามี)</label>
+                    <input type="url" name="onlineLink" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="https://meet.google.com/...">
                 </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('addSubjectModal')">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">หมายเหตุ</label>
+                    <textarea name="notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('addSubjectModal')" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         ยกเลิก
                     </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> บันทึก
+                    <button type="submit" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>บันทึก
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Subject Details Modal -->
-    <div id="subjectDetailsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="subjectDetailsTitle">รายละเอียดวิชา</h3>
-                <button class="close-btn" onclick="closeModal('subjectDetailsModal')">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div id="subjectDetailsContent" class="subject-details">
-                <!-- Subject details will be populated here -->
-            </div>
-            <div class="form-actions">
-                <button type="button" class="btn btn-danger" id="deleteSubjectBtn">
-                    <i class="fas fa-trash"></i> ลบวิชา
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="closeModal('subjectDetailsModal')">
-                    ปิด
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Add Todo Modal -->
-    <div id="addTodoModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>เพิ่มสิ่งที่ต้องทำ</h3>
-                <button class="close-btn" onclick="closeModal('addTodoModal')">
-                    <i class="fas fa-times"></i>
-                </button>
+    <div id="addTodoModal" class="fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">เพิ่มสิ่งที่ต้องทำ</h3>
             </div>
-            <form id="addTodoForm">
-                <div class="form-group">
-                    <label for="todoText">สิ่งที่ต้องทำ</label>
-                    <input type="text" id="todoText" name="todoText" required 
-                           placeholder="เช่น ทำการบ้านวิชาคณิตศาสตร์">
+            <form id="addTodoForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">รายการ</label>
+                    <input type="text" name="todoText" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น ทำการบ้านแคลคูลัส">
                 </div>
-                <div class="form-group">
-                    <label for="todoDate">วันที่</label>
-                    <input type="date" id="todoDate" name="todoDate" required>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่กำหนด</label>
+                    <input type="date" name="todoDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                 </div>
-                <div class="form-group">
-                    <label for="todoPriority">ความสำคัญ</label>
-                    <select id="todoPriority" name="todoPriority">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ความสำคัญ</label>
+                    <select name="todoPriority" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                         <option value="low">ต่ำ</option>
-                        <option value="medium" selected>กลาง</option>
+                        <option value="medium" selected>ปานกลาง</option>
                         <option value="high">สูง</option>
                     </select>
                 </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('addTodoModal')">
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('addTodoModal')" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         ยกเลิก
                     </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> บันทึก
+                    <button type="submit" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>บันทึก
                     </button>
                 </div>
             </form>
@@ -288,44 +338,71 @@
     </div>
 
     <!-- Add Holiday Modal -->
-    <div id="addHolidayModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>เพิ่มวันหยุด</h3>
-                <button class="close-btn" onclick="closeModal('addHolidayModal')">
-                    <i class="fas fa-times"></i>
-                </button>
+    <div id="addHolidayModal" class="fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">เพิ่มวันหยุด</h3>
             </div>
-            <form id="addHolidayForm">
-                <div class="form-group">
-                    <label for="holidayName">ชื่อวันหยุด</label>
-                    <input type="text" id="holidayName" name="holidayName" required 
-                           placeholder="เช่น วันหยุดกลางภาค">
+            <form id="addHolidayForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อวันหยุด</label>
+                    <input type="text" name="holidayName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น วันหยุดกลางภาค">
                 </div>
-                <div class="form-group">
-                    <label for="holidayDate">วันที่</label>
-                    <input type="date" id="holidayDate" name="holidayDate" required>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่หยุด</label>
+                    <input type="date" name="holidayDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                 </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="moveToSunday" name="moveToSunday" checked>
-                        เลื่อนคาบเรียนไปวันอาทิตย์
+                <div>
+                    <label class="flex items-center">
+                        <input type="checkbox" name="hasMakeup" class="mr-2">
+                        <span class="text-sm text-gray-700">มีการชดเชย</span>
                     </label>
                 </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('addHolidayModal')">
+                <div id="makeupFields" class="space-y-4 hidden">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">วันที่ชดเชย</label>
+                        <input type="date" name="makeupDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">เวลาชดเชย</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="time" name="makeupStartTime" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                            <input type="time" name="makeupEndTime" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">สถานที่ชดเชย</label>
+                        <input type="text" name="makeupLocation" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" placeholder="เช่น ห้อง 301">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeModal('addHolidayModal')" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         ยกเลิก
                     </button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> บันทึก
+                    <button type="submit" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>บันทึก
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- App Scripts -->
+    <!-- Scripts -->
+    <script src="firebase-config.js"></script>
     <script src="storage.js"></script>
     <script src="script.js"></script>
+    <script src="calendar.js"></script>
+    
+    <script>
+        // Handle makeup fields visibility
+        document.querySelector('input[name="hasMakeup"]').addEventListener('change', function() {
+            const makeupFields = document.getElementById('makeupFields');
+            if (this.checked) {
+                makeupFields.classList.remove('hidden');
+            } else {
+                makeupFields.classList.add('hidden');
+            }
+        });
+    </script>
 </body>
 </html>

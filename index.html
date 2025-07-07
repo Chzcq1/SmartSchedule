@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตารางเรียน - Interactive Timetable</title>
+    <meta name="firebase-project-id" content="ENV_FIREBASE_PROJECT_ID">
+    <meta name="firebase-api-key" content="ENV_FIREBASE_API_KEY">
+    <meta name="firebase-app-id" content="ENV_FIREBASE_APP_ID">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>กำลังโหลดข้อมูล...</p>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-calendar-alt"></i> ตารางเรียน</h1>
+                <div class="header-controls">
+                    <select id="termSelect" class="term-select">
+                        <option value="">เลือกเทอม</option>
+                    </select>
+                    <button id="addTermBtn" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> เพิ่มเทอม
+                    </button>
+                    <button id="addSubjectBtn" class="btn btn-secondary">
+                        <i class="fas fa-book"></i> เพิ่มรายวิชา
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Current Date Info -->
+            <div class="date-info">
+                <div class="current-date">
+                    <i class="fas fa-calendar-day"></i>
+                    <span id="currentDate"></span>
+                </div>
+                <div class="week-navigation">
+                    <button id="prevWeek" class="btn btn-nav">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span id="weekRange"></span>
+                    <button id="nextWeek" class="btn btn-nav">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Timetable -->
+            <div class="timetable-container">
+                <div class="timetable-wrapper">
+                    <table id="timetable" class="timetable">
+                        <thead>
+                            <tr>
+                                <th class="time-column">เวลา</th>
+                                <th>จันทร์</th>
+                                <th>อังคาร</th>
+                                <th>พุธ</th>
+                                <th>พฤหัสบดี</th>
+                                <th>ศุกร์</th>
+                                <th>เสาร์</th>
+                                <th>อาทิตย์</th>
+                            </tr>
+                        </thead>
+                        <tbody id="timetableBody">
+                            <!-- Timetable rows will be generated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Daily Todo Section -->
+            <div class="todo-section">
+                <div class="todo-header">
+                    <h3><i class="fas fa-tasks"></i> สิ่งที่ต้องทำวันนี้</h3>
+                    <button id="addTodoBtn" class="btn btn-small">
+                        <i class="fas fa-plus"></i> เพิ่ม
+                    </button>
+                </div>
+                <div class="todo-list" id="todoList">
+                    <div class="no-todos">
+                        <i class="fas fa-check-circle"></i>
+                        <p>ไม่มีสิ่งที่ต้องทำในวันนี้</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Holiday Management -->
+            <div class="holiday-section">
+                <div class="holiday-header">
+                    <h3><i class="fas fa-umbrella-beach"></i> วันหยุด</h3>
+                    <button id="addHolidayBtn" class="btn btn-small">
+                        <i class="fas fa-plus"></i> เพิ่มวันหยุด
+                    </button>
+                </div>
+                <div class="holiday-list" id="holidayList">
+                    <div class="no-holidays">
+                        <i class="fas fa-calendar-check"></i>
+                        <p>ไม่มีวันหยุดที่กำหนด</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Add Term Modal -->
+    <div id="addTermModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>เพิ่มเทอมใหม่</h3>
+                <button class="close-btn" onclick="closeModal('addTermModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addTermForm">
+                <div class="form-group">
+                    <label for="termName">ชื่อเทอม</label>
+                    <input type="text" id="termName" name="termName" required 
+                           placeholder="เช่น เทอม 1/2567">
+                </div>
+                <div class="form-group">
+                    <label for="termStartDate">วันเริ่มเทอม</label>
+                    <input type="date" id="termStartDate" name="termStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="termEndDate">วันสิ้นสุดเทอม</label>
+                    <input type="date" id="termEndDate" name="termEndDate" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addTermModal')">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Subject Modal -->
+    <div id="addSubjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>เพิ่มรายวิชา</h3>
+                <button class="close-btn" onclick="closeModal('addSubjectModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addSubjectForm">
+                <div class="form-group">
+                    <label for="subjectName">ชื่อวิชา</label>
+                    <input type="text" id="subjectName" name="subjectName" required 
+                           placeholder="เช่น วิทยาศาสตร์คอมพิวเตอร์">
+                </div>
+                <div class="form-group">
+                    <label for="subjectCode">รหัสวิชา</label>
+                    <input type="text" id="subjectCode" name="subjectCode" 
+                           placeholder="เช่น CS101">
+                </div>
+                <div class="form-group">
+                    <label for="instructor">อาจารย์ผู้สอน</label>
+                    <input type="text" id="instructor" name="instructor" 
+                           placeholder="เช่น อ.สมชาย">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dayOfWeek">วันในสัปดาห์</label>
+                        <select id="dayOfWeek" name="dayOfWeek" required>
+                            <option value="">เลือกวัน</option>
+                            <option value="1">จันทร์</option>
+                            <option value="2">อังคาร</option>
+                            <option value="3">พุธ</option>
+                            <option value="4">พฤหัสบดี</option>
+                            <option value="5">ศุกร์</option>
+                            <option value="6">เสาร์</option>
+                            <option value="0">อาทิตย์</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="startTime">เวลาเริ่ม</label>
+                        <input type="time" id="startTime" name="startTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="endTime">เวลาสิ้นสุด</label>
+                        <input type="time" id="endTime" name="endTime" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="location">สถานที่</label>
+                    <input type="text" id="location" name="location" 
+                           placeholder="เช่น ห้อง 101 หรือ Online">
+                </div>
+                <div class="form-group">
+                    <label for="onlineLink">ลิงก์เรียนออนไลน์</label>
+                    <input type="url" id="onlineLink" name="onlineLink" 
+                           placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="notes">หมายเหตุ</label>
+                    <textarea id="notes" name="notes" rows="3" 
+                              placeholder="ข้อมูลเพิ่มเติม..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addSubjectModal')">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Subject Details Modal -->
+    <div id="subjectDetailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="subjectDetailsTitle">รายละเอียดวิชา</h3>
+                <button class="close-btn" onclick="closeModal('subjectDetailsModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="subjectDetailsContent" class="subject-details">
+                <!-- Subject details will be populated here -->
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-danger" id="deleteSubjectBtn">
+                    <i class="fas fa-trash"></i> ลบวิชา
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('subjectDetailsModal')">
+                    ปิด
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Todo Modal -->
+    <div id="addTodoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>เพิ่มสิ่งที่ต้องทำ</h3>
+                <button class="close-btn" onclick="closeModal('addTodoModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addTodoForm">
+                <div class="form-group">
+                    <label for="todoText">สิ่งที่ต้องทำ</label>
+                    <input type="text" id="todoText" name="todoText" required 
+                           placeholder="เช่น ทำการบ้านวิชาคณิตศาสตร์">
+                </div>
+                <div class="form-group">
+                    <label for="todoDate">วันที่</label>
+                    <input type="date" id="todoDate" name="todoDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="todoPriority">ความสำคัญ</label>
+                    <select id="todoPriority" name="todoPriority">
+                        <option value="low">ต่ำ</option>
+                        <option value="medium" selected>กลาง</option>
+                        <option value="high">สูง</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addTodoModal')">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Holiday Modal -->
+    <div id="addHolidayModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>เพิ่มวันหยุด</h3>
+                <button class="close-btn" onclick="closeModal('addHolidayModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addHolidayForm">
+                <div class="form-group">
+                    <label for="holidayName">ชื่อวันหยุด</label>
+                    <input type="text" id="holidayName" name="holidayName" required 
+                           placeholder="เช่น วันหยุดกลางภาค">
+                </div>
+                <div class="form-group">
+                    <label for="holidayDate">วันที่</label>
+                    <input type="date" id="holidayDate" name="holidayDate" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="moveToSunday" name="moveToSunday" checked>
+                        เลื่อนคาบเรียนไปวันอาทิตย์
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addHolidayModal')">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

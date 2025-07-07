@@ -1,202 +1,127 @@
-// Global Variables
+// Global variables
 let currentTerm = null;
-let currentWeekStart = null;
-let timetableData = {};
 let subjectsData = {};
 let todosData = {};
 let holidaysData = {};
+let currentWeekStart = null;
 
-// Thai day names
-const thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-
-// Time slots for timetable (24-hour format)
+// Time slots for timetable (8:00 AM to 7:30 PM)
 const timeSlots = [
-    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-    '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
 ];
 
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    setupEventListeners();
-    
-    // Wait for Firebase to be ready
-    if (window.firebaseDB) {
-        initializeApp();
-    } else {
-        window.addEventListener('firebaseReady', function() {
-            initializeApp();
-        });
+// Days of week in Thai
+const daysOfWeek = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        showLoading();
+        await initializeApp();
+        hideLoading();
+        console.log('App initialized successfully');
+    } catch (error) {
+        console.error('Error initializing app:', error);
+        hideLoading();
+        showError('เกิดข้อผิดพลาดในการเริ่มต้นแอปพลิเคชัน');
     }
 });
 
 async function initializeApp() {
-    try {
-        showLoading();
-        console.log('Initializing app...');
-        
-        // Check if Firebase is available
-        if (!window.firebaseDB) {
-            console.error('Firebase database not available');
-            showFirebaseError();
-            return;
+    console.log('Initializing app...');
+    
+    // Load current term
+    currentTerm = window.localDB.getCurrentTerm();
+    
+    // Load terms and set up term selector
+    await loadTerms();
+    
+    // If no current term, set to first available term
+    if (!currentTerm) {
+        const terms = await window.localDB.getTerms();
+        const termIds = Object.keys(terms);
+        if (termIds.length > 0) {
+            currentTerm = termIds[0];
+            window.localDB.setCurrentTerm(currentTerm);
         }
-        
-        // Test Firebase connection with timeout
-        try {
-            const connectionPromise = window.firebaseDB.ref('test').once('value');
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firebase connection timeout')), 5000)
-            );
-            
-            await Promise.race([connectionPromise, timeoutPromise]);
-            console.log('Firebase connection test passed');
-        } catch (error) {
-            console.error('Firebase connection failed:', error);
-            // Continue with offline mode instead of showing error
-            console.log('Continuing in offline mode...');
-            initOfflineMode();
-            return;
-        }
-        
-        await loadTerms();
-        setCurrentDate();
-        setCurrentWeek();
-        await loadAllData();
-        generateTimetable();
-        updateTodoList();
-        updateHolidayList();
-        
-        console.log('App initialized successfully');
-    } catch (error) {
-        console.error('Error initializing app:', error);
-        if (error.message.includes('permission') || error.message.includes('Firebase')) {
-            showFirebaseError();
-        } else {
-            alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + error.message);
-        }
-    } finally {
-        hideLoading();
     }
-}
-
-function initOfflineMode() {
-    console.log('Initializing offline mode...');
     
-    // Show offline mode notification
-    const offlineDiv = document.createElement('div');
-    offlineDiv.id = 'offlineNotice';
-    offlineDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #ffa500;
-        color: white;
-        padding: 15px 25px;
-        border-radius: 10px;
-        z-index: 10000;
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    `;
-    offlineDiv.innerHTML = `
-        <strong>โหมดออฟไลน์</strong> - กำลังใช้งานแบบทดสอบ
-        <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; margin-left: 10px; cursor: pointer; font-size: 16px;">×</button>
-    `;
-    document.body.appendChild(offlineDiv);
+    // Set current term in selector
+    const termSelect = document.getElementById('termSelect');
+    if (currentTerm) {
+        termSelect.value = currentTerm;
+    }
     
-    // Initialize with sample data
-    initSampleData();
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Set current date and week
     setCurrentDate();
     setCurrentWeek();
+    
+    // Load all data for current term
+    await loadAllData();
+    
+    // Generate timetable
     generateTimetable();
+    
+    // Update other components
     updateTodoList();
     updateHolidayList();
     
-    console.log('Offline mode initialized successfully');
+    console.log('App initialized successfully');
 }
 
-function initSampleData() {
-    // Sample term data
-    const sampleTermId = 'term_2568_1';
-    currentTerm = sampleTermId;
+function setupEventListeners() {
+    // Term selector
+    document.getElementById('termSelect').addEventListener('change', onTermChange);
     
-    // Set term selector
-    const termSelect = document.getElementById('termSelect');
-    termSelect.innerHTML = `
-        <option value="">เลือกเทอม</option>
-        <option value="${sampleTermId}" selected>เทอม 1/2568 (ตัวอย่าง)</option>
-    `;
+    // Week navigation
+    document.getElementById('prevWeek').addEventListener('click', () => navigateWeek(-1));
+    document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
     
-    // Sample subjects data (based on your university schedule)
-    subjectsData = {
-        'math_calculus': {
-            name: 'แคลคูลัส 2',
-            code: 'MATH201',
-            instructor: 'อ.สมชาย',
-            dayOfWeek: 3, // Wednesday
-            startTime: '13:00',
-            endTime: '15:00',
-            location: 'ห้อง 301',
-            onlineLink: '',
-            notes: 'ต้องเตรียมเครื่องคิดเลข'
-        },
-        'physics_lab': {
-            name: 'ปฏิบัติการฟิสิกส์',
-            code: 'PHYS105',
-            instructor: 'อ.สมหญิง',
-            dayOfWeek: 5, // Friday
-            startTime: '09:00',
-            endTime: '12:00',
-            location: 'ห้องปฏิบัติการ A',
-            onlineLink: '',
-            notes: 'ใส่เสื้อกาวน์ขาว'
-        },
-        'computer_sci': {
-            name: 'วิทยาศาสตร์คอมพิวเตอร์',
-            code: 'CS101',
-            instructor: 'อ.เทคโน',
-            dayOfWeek: 2, // Tuesday
-            startTime: '10:00',
-            endTime: '12:00',
-            location: 'ห้องคอมพิวเตอร์ 1',
-            onlineLink: 'https://meet.google.com/abc-defg-hij',
-            notes: 'เตรียมแล็ปท็อป'
-        }
-    };
+    // Form submissions
+    document.getElementById('addTermForm').addEventListener('submit', handleAddTerm);
+    document.getElementById('addSubjectForm').addEventListener('submit', handleAddSubject);
+    document.getElementById('addTodoForm').addEventListener('submit', handleAddTodo);
+    document.getElementById('addHolidayForm').addEventListener('submit', handleAddHoliday);
     
-    // Sample todos
-    const today = new Date().toISOString().split('T')[0];
-    todosData = {
-        'todo1': {
-            text: 'ทำการบ้านแคลคูลัส บทที่ 5',
-            date: today,
-            priority: 'high',
-            completed: false
-        },
-        'todo2': {
-            text: 'อ่านหนังสือฟิสิกส์ บทที่ 3',
-            date: today,
-            priority: 'medium',
-            completed: false
-        }
-    };
+    // Modal close buttons
+    document.querySelectorAll('.modal .close').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modal = e.target.closest('.modal');
+            closeModal(modal.id);
+        });
+    });
     
-    // Sample holidays
-    holidaysData = {
-        'holiday1': {
-            name: 'วันหยุดกลางภาค',
-            date: '2024-10-15',
-            moveToSunday: true
-        }
-    };
+    // Click outside modal to close
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal(modal.id);
+            }
+        });
+    });
 }
 
-function showFirebaseError() {
-    hideLoading();
+function showLoading() {
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) {
+        loadingDiv.style.display = 'flex';
+    }
+}
+
+function hideLoading() {
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+    }
+}
+
+function showError(message) {
     const errorDiv = document.createElement('div');
-    errorDiv.id = 'firebaseError';
     errorDiv.style.cssText = `
         position: fixed;
         top: 20px;
@@ -206,90 +131,35 @@ function showFirebaseError() {
         color: white;
         padding: 20px;
         border-radius: 10px;
-        max-width: 600px;
         z-index: 10000;
         text-align: center;
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     `;
     errorDiv.innerHTML = `
-        <h3>🔥 ต้องเปิดใช้งาน Firebase Realtime Database</h3>
-        <p>กรุณาไปที่ Firebase Console และเปิดใช้งาน Realtime Database:</p>
-        <ol style="text-align: left; margin: 10px 0;">
-            <li>เข้าไปที่ <strong>Firebase Console</strong></li>
-            <li>เลือก <strong>Realtime Database</strong> จากเมนูซ้าย</li>
-            <li>คลิก <strong>Create Database</strong></li>
-            <li>เลือก <strong>Start in test mode</strong> สำหรับการทดสอบ</li>
-        </ol>
-        <button onclick="location.reload()" style="background: white; color: #ff4444; border: none; padding: 10px 20px; border-radius: 5px; margin-top: 10px; cursor: pointer;">
-            โหลดใหม่
-        </button>
-        <button onclick="this.parentElement.remove(); initOfflineMode();" style="background: #ff6666; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 10px 5px; cursor: pointer;">
-            ใช้งานแบบออฟไลน์
+        <strong>เกิดข้อผิดพลาด</strong><br>
+        ${message}
+        <button onclick="this.parentElement.remove()" style="background: white; color: #ff4444; border: none; padding: 5px 10px; border-radius: 3px; margin-left: 10px; cursor: pointer;">
+            ปิด
         </button>
     `;
     document.body.appendChild(errorDiv);
 }
 
-function setupEventListeners() {
-    // Term selection
-    document.getElementById('termSelect').addEventListener('change', onTermChange);
-    
-    // Header buttons
-    document.getElementById('addTermBtn').addEventListener('click', () => openModal('addTermModal'));
-    document.getElementById('addSubjectBtn').addEventListener('click', () => openModal('addSubjectModal'));
-    
-    // Week navigation
-    document.getElementById('prevWeek').addEventListener('click', () => navigateWeek(-1));
-    document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
-    
-    // Todo section
-    document.getElementById('addTodoBtn').addEventListener('click', () => openModal('addTodoModal'));
-    
-    // Holiday section
-    document.getElementById('addHolidayBtn').addEventListener('click', () => openModal('addHolidayModal'));
-    
-    // Form submissions
-    document.getElementById('addTermForm').addEventListener('submit', handleAddTerm);
-    document.getElementById('addSubjectForm').addEventListener('submit', handleAddSubject);
-    document.getElementById('addTodoForm').addEventListener('submit', handleAddTodo);
-    document.getElementById('addHolidayForm').addEventListener('submit', handleAddHoliday);
-    
-    // Modal close events
-    document.querySelectorAll('.modal').forEach(modal => {
-        modal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal(this.id);
-            }
-        });
-    });
-}
-
-// Loading functions
-function showLoading() {
-    document.getElementById('loading').style.display = 'flex';
-}
-
-function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
-}
-
-// Date and time functions
 function setCurrentDate() {
     const now = new Date();
     const options = { 
+        weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
-        day: 'numeric',
-        weekday: 'long'
+        day: 'numeric' 
     };
-    const thaiDate = now.toLocaleDateString('th-TH', options);
-    document.getElementById('currentDate').textContent = thaiDate;
+    document.getElementById('currentDate').textContent = now.toLocaleDateString('th-TH', options);
 }
 
 function setCurrentWeek() {
     const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Get Monday
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek;
     currentWeekStart = new Date(now.setDate(diff));
     updateWeekDisplay();
 }
@@ -298,9 +168,8 @@ function updateWeekDisplay() {
     const weekEnd = new Date(currentWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     
-    const options = { month: 'short', day: 'numeric' };
-    const startStr = currentWeekStart.toLocaleDateString('th-TH', options);
-    const endStr = weekEnd.toLocaleDateString('th-TH', options);
+    const startStr = currentWeekStart.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    const endStr = weekEnd.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     
     document.getElementById('weekRange').textContent = `${startStr} - ${endStr}`;
 }
@@ -313,38 +182,29 @@ function navigateWeek(direction) {
 
 function getDateForDay(dayOfWeek) {
     const date = new Date(currentWeekStart);
-    date.setDate(date.getDate() + (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    date.setDate(date.getDate() + dayOfWeek);
     return date;
 }
 
-// Firebase functions
 async function loadTerms() {
     try {
-        const snapshot = await firebaseDB.ref('terms').once('value');
-        const terms = snapshot.val() || {};
-        
+        const terms = await window.localDB.getTerms();
         const termSelect = document.getElementById('termSelect');
+        
+        // Clear existing options except the first one
         termSelect.innerHTML = '<option value="">เลือกเทอม</option>';
         
-        Object.keys(terms).forEach(termId => {
-            const term = terms[termId];
+        // Add terms to selector
+        Object.entries(terms).forEach(([termId, term]) => {
             const option = document.createElement('option');
             option.value = termId;
             option.textContent = term.name;
             termSelect.appendChild(option);
         });
         
-        // Select first term if available
-        if (Object.keys(terms).length > 0) {
-            const firstTermId = Object.keys(terms)[0];
-            termSelect.value = firstTermId;
-            currentTerm = firstTermId;
-        }
-        
-        console.log('Terms loaded successfully:', Object.keys(terms).length, 'terms found');
+        console.log('Terms loaded successfully');
     } catch (error) {
         console.error('Error loading terms:', error);
-        alert('เกิดข้อผิดพลาดในการโหลดข้อมูลเทอม: ' + error.message);
     }
 }
 
@@ -353,18 +213,15 @@ async function loadAllData() {
     
     try {
         // Load subjects
-        const subjectsSnapshot = await firebaseDB.ref(`subjects/${currentTerm}`).once('value');
-        subjectsData = subjectsSnapshot.val() || {};
+        subjectsData = await window.localDB.getSubjects(currentTerm);
         
         // Load todos
-        const todosSnapshot = await firebaseDB.ref(`todos/${currentTerm}`).once('value');
-        todosData = todosSnapshot.val() || {};
+        todosData = await window.localDB.getTodos(currentTerm);
         
         // Load holidays
-        const holidaysSnapshot = await firebaseDB.ref(`holidays/${currentTerm}`).once('value');
-        holidaysData = holidaysSnapshot.val() || {};
+        holidaysData = await window.localDB.getHolidays(currentTerm);
         
-        console.log('Data loaded successfully');
+        console.log('All data loaded successfully');
     } catch (error) {
         console.error('Error loading data:', error);
     }
@@ -372,58 +229,62 @@ async function loadAllData() {
 
 async function onTermChange() {
     const termSelect = document.getElementById('termSelect');
-    currentTerm = termSelect.value;
+    const selectedTerm = termSelect.value;
     
-    if (currentTerm) {
-        showLoading();
+    if (selectedTerm && selectedTerm !== currentTerm) {
+        currentTerm = selectedTerm;
+        window.localDB.setCurrentTerm(currentTerm);
+        
         await loadAllData();
         generateTimetable();
-        updateTodoList();
-        updateHolidayList();
-        hideLoading();
-    } else {
-        // Clear displays
-        document.getElementById('timetableBody').innerHTML = '';
         updateTodoList();
         updateHolidayList();
     }
 }
 
-// Timetable generation
 function generateTimetable() {
-    const tbody = document.getElementById('timetableBody');
+    const tbody = document.querySelector('#timetable tbody');
     tbody.innerHTML = '';
     
-    // Create time slots
-    timeSlots.forEach(time => {
+    timeSlots.forEach(timeSlot => {
         const row = document.createElement('tr');
         
         // Time column
         const timeCell = document.createElement('td');
-        timeCell.className = 'time-column';
-        timeCell.textContent = time;
+        timeCell.className = 'time-slot';
+        timeCell.textContent = timeSlot;
         row.appendChild(timeCell);
         
-        // Day columns (Monday to Sunday)
-        for (let day = 1; day <= 7; day++) {
-            const dayCell = document.createElement('td');
-            dayCell.dataset.day = day === 7 ? 0 : day; // Sunday = 0
-            dayCell.dataset.time = time;
-            dayCell.addEventListener('click', () => onCellClick(dayCell));
+        // Day columns
+        for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+            const cell = document.createElement('td');
+            cell.className = 'timetable-cell';
+            cell.dataset.day = dayIndex;
+            cell.dataset.time = timeSlot;
             
             // Check if there's a subject for this time slot
-            const subject = getSubjectForTimeSlot(day === 7 ? 0 : day, time);
+            const subject = getSubjectForTimeSlot(dayIndex, timeSlot);
             if (subject) {
-                dayCell.innerHTML = `
-                    <div class="subject-cell">
+                cell.innerHTML = `
+                    <div class="subject-block" onclick="showSubjectDetails('${subject.id}')">
                         <div class="subject-name">${subject.name}</div>
-                        <div class="subject-location">${subject.location || ''}</div>
+                        <div class="subject-location">${subject.location}</div>
                     </div>
                 `;
-                dayCell.dataset.subjectId = subject.id;
+                cell.classList.add('has-subject');
+            } else {
+                const date = getDateForDay(dayIndex);
+                const isHoliday = checkIfHoliday(date);
+                
+                if (isHoliday) {
+                    cell.classList.add('holiday');
+                    cell.innerHTML = `<div class="holiday-indicator">วันหยุด</div>`;
+                } else {
+                    cell.addEventListener('click', () => onCellClick(cell));
+                }
             }
             
-            row.appendChild(dayCell);
+            row.appendChild(cell);
         }
         
         tbody.appendChild(row);
@@ -431,61 +292,31 @@ function generateTimetable() {
 }
 
 function getSubjectForTimeSlot(dayOfWeek, timeSlot) {
-    const currentDate = getDateForDay(dayOfWeek);
-    const isHoliday = checkIfHoliday(currentDate);
-    
-    for (const subjectId in subjectsData) {
-        const subject = subjectsData[subjectId];
+    return Object.values(subjectsData).find(subject => {
+        if (subject.dayOfWeek !== dayOfWeek) return false;
         
-        // Check if subject matches day and time
-        if (parseInt(subject.dayOfWeek) === dayOfWeek && 
-            timeSlot >= subject.startTime && 
-            timeSlot < subject.endTime) {
-            
-            // If it's a holiday and moveToSunday is enabled
-            if (isHoliday && isHoliday.moveToSunday && dayOfWeek === 0) {
-                return { ...subject, id: subjectId };
-            } else if (!isHoliday) {
-                return { ...subject, id: subjectId };
-            }
-        }
-    }
-    
-    return null;
+        const startTime = subject.startTime;
+        const endTime = subject.endTime;
+        
+        return timeSlot >= startTime && timeSlot < endTime;
+    });
 }
 
 function checkIfHoliday(date) {
-    const dateString = date.toISOString().split('T')[0];
-    
-    for (const holidayId in holidaysData) {
-        const holiday = holidaysData[holidayId];
-        if (holiday.date === dateString) {
-            return holiday;
-        }
-    }
-    
-    return null;
+    const dateStr = date.toISOString().split('T')[0];
+    return Object.values(holidaysData).some(holiday => holiday.date === dateStr);
 }
 
 function onCellClick(cell) {
-    const subjectId = cell.dataset.subjectId;
+    const day = parseInt(cell.dataset.day);
+    const time = cell.dataset.time;
     
-    if (subjectId) {
-        showSubjectDetails(subjectId);
-    } else {
-        // Open add subject modal with pre-filled data
-        const day = cell.dataset.day;
-        const time = cell.dataset.time;
+    if (confirm(`คุณต้องการเพิ่มรายวิชาสำหรับวัน${daysOfWeek[day]} เวลา ${time} หรือไม่?`)) {
+        openModal('addSubjectModal');
         
+        // Pre-fill form with selected day and time
         document.getElementById('dayOfWeek').value = day;
         document.getElementById('startTime').value = time;
-        
-        // Set end time (1 hour later)
-        const endTime = new Date(`2000-01-01T${time}:00`);
-        endTime.setHours(endTime.getHours() + 1);
-        document.getElementById('endTime').value = endTime.toTimeString().substr(0, 5);
-        
-        openModal('addSubjectModal');
     }
 }
 
@@ -493,141 +324,135 @@ function showSubjectDetails(subjectId) {
     const subject = subjectsData[subjectId];
     if (!subject) return;
     
-    document.getElementById('subjectDetailsTitle').textContent = subject.name;
+    const modal = document.getElementById('subjectDetailsModal');
+    if (!modal) {
+        // Create subject details modal
+        const modalHTML = `
+            <div id="subjectDetailsModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2><i class="fas fa-book"></i> รายละเอียดรายวิชา</h2>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div id="subjectDetailsContent"></div>
+                        <div class="modal-actions">
+                            <button class="btn btn-danger" onclick="deleteSubject('${subjectId}')">
+                                <i class="fas fa-trash"></i> ลบรายวิชา
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Add close event listeners
+        const newModal = document.getElementById('subjectDetailsModal');
+        newModal.querySelector('.close').addEventListener('click', () => closeModal('subjectDetailsModal'));
+        newModal.addEventListener('click', (e) => {
+            if (e.target === newModal) closeModal('subjectDetailsModal');
+        });
+    }
     
+    // Fill subject details
     const content = document.getElementById('subjectDetailsContent');
     content.innerHTML = `
-        <div class="detail-item">
-            <div class="detail-label">รหัสวิชา:</div>
-            <div class="detail-value">${subject.code || 'ไม่ระบุ'}</div>
+        <div class="subject-detail">
+            <h3>${subject.name}</h3>
+            <p><strong>รหัสวิชา:</strong> ${subject.code}</p>
+            <p><strong>อาจารย์:</strong> ${subject.instructor}</p>
+            <p><strong>วันเวลา:</strong> ${daysOfWeek[subject.dayOfWeek]} ${subject.startTime} - ${subject.endTime}</p>
+            <p><strong>สถานที่:</strong> ${subject.location}</p>
+            ${subject.onlineLink ? `<p><strong>ลิงก์ออนไลน์:</strong> <a href="${subject.onlineLink}" target="_blank">${subject.onlineLink}</a></p>` : ''}
+            ${subject.notes ? `<p><strong>หมายเหตุ:</strong> ${subject.notes}</p>` : ''}
         </div>
-        <div class="detail-item">
-            <div class="detail-label">อาจารย์ผู้สอน:</div>
-            <div class="detail-value">${subject.instructor || 'ไม่ระบุ'}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">วันเวลา:</div>
-            <div class="detail-value">${thaiDays[subject.dayOfWeek]} ${subject.startTime}-${subject.endTime}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">สถานที่:</div>
-            <div class="detail-value">${subject.location || 'ไม่ระบุ'}</div>
-        </div>
-        ${subject.onlineLink ? `
-        <div class="detail-item">
-            <div class="detail-label">ลิงก์เรียนออนไลน์:</div>
-            <div class="detail-value"><a href="${subject.onlineLink}" target="_blank">${subject.onlineLink}</a></div>
-        </div>
-        ` : ''}
-        ${subject.notes ? `
-        <div class="detail-item">
-            <div class="detail-label">หมายเหตุ:</div>
-            <div class="detail-value">${subject.notes}</div>
-        </div>
-        ` : ''}
     `;
-    
-    // Set up delete button
-    document.getElementById('deleteSubjectBtn').onclick = () => deleteSubject(subjectId);
     
     openModal('subjectDetailsModal');
 }
 
-// Todo functions
 function updateTodoList() {
-    const todoList = document.getElementById('todoList');
-    const today = new Date().toISOString().split('T')[0];
+    const container = document.getElementById('todoList');
+    if (!container) return;
     
-    // Filter todos for today
-    const todayTodos = Object.entries(todosData).filter(([id, todo]) => todo.date === today);
+    const todos = Object.entries(todosData).sort((a, b) => {
+        // Sort by date, then by priority
+        const dateA = new Date(a[1].date);
+        const dateB = new Date(b[1].date);
+        if (dateA.getTime() !== dateB.getTime()) {
+            return dateA - dateB;
+        }
+        
+        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+        return priorityOrder[b[1].priority] - priorityOrder[a[1].priority];
+    });
     
-    if (todayTodos.length === 0) {
-        todoList.innerHTML = `
-            <div class="no-todos">
-                <i class="fas fa-check-circle"></i>
-                <p>ไม่มีสิ่งที่ต้องทำในวันนี้</p>
-            </div>
-        `;
-        return;
-    }
-    
-    todoList.innerHTML = todayTodos.map(([id, todo]) => `
-        <div class="todo-item priority-${todo.priority} ${todo.completed ? 'completed' : ''}">
-            <input type="checkbox" ${todo.completed ? 'checked' : ''} 
-                   onchange="toggleTodo('${id}', this.checked)">
+    container.innerHTML = todos.map(([todoId, todo]) => `
+        <div class="todo-item ${todo.completed ? 'completed' : ''}" data-priority="${todo.priority}">
             <div class="todo-content">
-                <div class="todo-text">${todo.text}</div>
-                <div class="todo-meta">ความสำคัญ: ${getPriorityText(todo.priority)}</div>
+                <input type="checkbox" ${todo.completed ? 'checked' : ''} 
+                       onchange="toggleTodo('${todoId}', this.checked)">
+                <span class="todo-text">${todo.text}</span>
+                <span class="todo-date">${new Date(todo.date).toLocaleDateString('th-TH')}</span>
+                <span class="todo-priority">${getPriorityText(todo.priority)}</span>
             </div>
-            <div class="todo-actions">
-                <button class="btn-danger" onclick="deleteTodo('${id}')">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+            <button class="delete-btn" onclick="deleteTodo('${todoId}')">
+                <i class="fas fa-trash"></i>
+            </button>
         </div>
     `).join('');
 }
 
 function getPriorityText(priority) {
     const priorities = {
-        low: 'ต่ำ',
-        medium: 'กลาง',
-        high: 'สูง'
+        'high': 'สูง',
+        'medium': 'ปานกลาง',
+        'low': 'ต่ำ'
     };
-    return priorities[priority] || 'กลาง';
+    return priorities[priority] || priority;
 }
 
 async function toggleTodo(todoId, completed) {
     try {
-        await firebaseDB.ref(`todos/${currentTerm}/${todoId}/completed`).set(completed);
+        await window.localDB.updateTodo(currentTerm, todoId, { completed });
         todosData[todoId].completed = completed;
         updateTodoList();
     } catch (error) {
         console.error('Error updating todo:', error);
-        alert('เกิดข้อผิดพลาดในการอัปเดตรายการ');
     }
 }
 
 async function deleteTodo(todoId) {
     if (confirm('คุณต้องการลบรายการนี้หรือไม่?')) {
         try {
-            await firebaseDB.ref(`todos/${currentTerm}/${todoId}`).remove();
+            await window.localDB.deleteTodo(currentTerm, todoId);
             delete todosData[todoId];
             updateTodoList();
         } catch (error) {
             console.error('Error deleting todo:', error);
-            alert('เกิดข้อผิดพลาดในการลบรายการ');
         }
     }
 }
 
-// Holiday functions
 function updateHolidayList() {
-    const holidayList = document.getElementById('holidayList');
-    const holidays = Object.entries(holidaysData);
+    const container = document.getElementById('holidayList');
+    if (!container) return;
     
-    if (holidays.length === 0) {
-        holidayList.innerHTML = `
-            <div class="no-holidays">
-                <i class="fas fa-calendar-check"></i>
-                <p>ไม่มีวันหยุดที่กำหนด</p>
-            </div>
-        `;
-        return;
-    }
+    const holidays = Object.entries(holidaysData).sort((a, b) => {
+        return new Date(a[1].date) - new Date(b[1].date);
+    });
     
-    holidayList.innerHTML = holidays.map(([id, holiday]) => `
+    container.innerHTML = holidays.map(([holidayId, holiday]) => `
         <div class="holiday-item">
-            <div class="holiday-info">
+            <div class="holiday-content">
                 <div class="holiday-name">${holiday.name}</div>
                 <div class="holiday-date">${formatThaiDate(holiday.date)}</div>
-                ${holiday.moveToSunday ? '<div class="text-muted">เลื่อนคาบเรียนไปวันอาทิตย์</div>' : ''}
+                ${holiday.moveToSunday ? '<div class="holiday-note">ย้ายไปวันอาทิตย์</div>' : ''}
             </div>
-            <div class="holiday-actions">
-                <button class="btn-danger" onclick="deleteHoliday('${id}')">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+            <button class="delete-btn" onclick="deleteHoliday('${holidayId}')">
+                <i class="fas fa-trash"></i>
+            </button>
         </div>
     `).join('');
 }
@@ -646,13 +471,12 @@ function formatThaiDate(dateString) {
 async function deleteHoliday(holidayId) {
     if (confirm('คุณต้องการลบวันหยุดนี้หรือไม่?')) {
         try {
-            await firebaseDB.ref(`holidays/${currentTerm}/${holidayId}`).remove();
+            await window.localDB.deleteHoliday(currentTerm, holidayId);
             delete holidaysData[holidayId];
             updateHolidayList();
             generateTimetable(); // Regenerate timetable
         } catch (error) {
             console.error('Error deleting holiday:', error);
-            alert('เกิดข้อผิดพลาดในการลบวันหยุด');
         }
     }
 }
@@ -673,11 +497,6 @@ function closeModal(modalId) {
     forms.forEach(form => form.reset());
 }
 
-// Utility function to check if Firebase is available
-function isFirebaseAvailable() {
-    return window.firebaseDB && typeof window.firebaseDB.ref === 'function';
-}
-
 // Form handlers
 async function handleAddTerm(e) {
     e.preventDefault();
@@ -691,28 +510,16 @@ async function handleAddTerm(e) {
     };
     
     try {
-        if (isFirebaseAvailable()) {
-            const termRef = await firebaseDB.ref('terms').push(termData);
-            closeModal('addTermModal');
-            await loadTerms();
-            
-            // Select the new term
-            document.getElementById('termSelect').value = termRef.key;
-            currentTerm = termRef.key;
-            await loadAllData();
-            generateTimetable();
-        } else {
-            // Offline mode
-            const termId = 'term_' + Date.now();
-            const termSelect = document.getElementById('termSelect');
-            const option = document.createElement('option');
-            option.value = termId;
-            option.textContent = termData.name;
-            termSelect.appendChild(option);
-            termSelect.value = termId;
-            currentTerm = termId;
-            closeModal('addTermModal');
-        }
+        const termId = await window.localDB.addTerm(termData);
+        closeModal('addTermModal');
+        await loadTerms();
+        
+        // Select the new term
+        document.getElementById('termSelect').value = termId;
+        currentTerm = termId;
+        window.localDB.setCurrentTerm(currentTerm);
+        await loadAllData();
+        generateTimetable();
         
         alert('เพิ่มเทอมเรียบร้อยแล้ว');
     } catch (error) {
@@ -744,14 +551,8 @@ async function handleAddSubject(e) {
     };
     
     try {
-        if (isFirebaseAvailable()) {
-            await firebaseDB.ref(`subjects/${currentTerm}`).push(subjectData);
-            await loadAllData();
-        } else {
-            // Offline mode - add to local data
-            const subjectId = 'subject_' + Date.now();
-            subjectsData[subjectId] = subjectData;
-        }
+        const subjectId = await window.localDB.addSubject(currentTerm, subjectData);
+        subjectsData[subjectId] = { ...subjectData, id: subjectId };
         
         closeModal('addSubjectModal');
         generateTimetable();
@@ -780,12 +581,12 @@ async function handleAddTodo(e) {
     };
     
     try {
-        await firebaseDB.ref(`todos/${currentTerm}`).push(todoData);
-        closeModal('addTodoModal');
-        await loadAllData();
-        updateTodoList();
+        const todoId = await window.localDB.addTodo(currentTerm, todoData);
+        todosData[todoId] = { ...todoData, id: todoId };
         
-        alert('เพิ่มรายการเรียบร้อยแล้ว');
+        closeModal('addTodoModal');
+        updateTodoList();
+        alert('เพิ่มรายการสำเร็จแล้ว');
     } catch (error) {
         console.error('Error adding todo:', error);
         alert('เกิดข้อผิดพลาดในการเพิ่มรายการ');
@@ -809,12 +610,12 @@ async function handleAddHoliday(e) {
     };
     
     try {
-        await firebaseDB.ref(`holidays/${currentTerm}`).push(holidayData);
-        closeModal('addHolidayModal');
-        await loadAllData();
-        updateHolidayList();
-        generateTimetable();
+        const holidayId = await window.localDB.addHoliday(currentTerm, holidayData);
+        holidaysData[holidayId] = { ...holidayData, id: holidayId };
         
+        closeModal('addHolidayModal');
+        updateHolidayList();
+        generateTimetable(); // Regenerate timetable
         alert('เพิ่มวันหยุดเรียบร้อยแล้ว');
     } catch (error) {
         console.error('Error adding holiday:', error);
@@ -825,11 +626,10 @@ async function handleAddHoliday(e) {
 async function deleteSubject(subjectId) {
     if (confirm('คุณต้องการลบรายวิชานี้หรือไม่?')) {
         try {
-            await firebaseDB.ref(`subjects/${currentTerm}/${subjectId}`).remove();
+            await window.localDB.deleteSubject(currentTerm, subjectId);
             delete subjectsData[subjectId];
-            closeModal('subjectDetailsModal');
             generateTimetable();
-            
+            closeModal('subjectDetailsModal');
             alert('ลบรายวิชาเรียบร้อยแล้ว');
         } catch (error) {
             console.error('Error deleting subject:', error);
@@ -837,9 +637,3 @@ async function deleteSubject(subjectId) {
         }
     }
 }
-
-// Set default todo date to today
-document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('todoDate').value = today;
-});
